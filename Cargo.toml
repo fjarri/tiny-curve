@@ -1,0 +1,8 @@
+[package]
+name = "tiny-curve"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+elliptic-curve = "0.13"
+primeorder = "0.13"
