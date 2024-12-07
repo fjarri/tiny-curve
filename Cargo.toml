@@ -4,5 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-elliptic-curve = "0.13"
 primeorder = "0.13"
+num-traits = "0.2"
+
+[dev-dependencies]
+criterion = "0.5"
+rand_core = { version = "0.6", features = ["getrandom"] }
+k256 = "0.13"
+
+[[bench]]
+bench = true
+name = "bench"
+harness = false
+path = "benches/bench.rs"

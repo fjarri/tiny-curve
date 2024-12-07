@@ -1,113 +1,165 @@
 use core::{
+    fmt::Debug,
     iter::{Product, Sum},
     ops::{Add, AddAssign, Mul, MulAssign, Neg, ShrAssign, Sub, SubAssign},
 };
 
-use elliptic_curve::{
+use num_traits::{ConstZero, FromBytes, ToBytes};
+use primeorder::elliptic_curve::{
     bigint::{
         modular::runtime_mod::{DynResidue, DynResidueParams},
         U64,
     },
+    ff::helpers::sqrt_ratio_generic,
+    generic_array::{typenum, GenericArray},
     ops::{Invert, Reduce},
     rand_core::RngCore,
     scalar::{FromUintUnchecked, IsHigh},
     subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
     zeroize::DefaultIsZeroes,
-    Curve, Field, FieldBytes, PrimeField, ScalarPrimitive,
+    Curve, Field, PrimeField, ScalarPrimitive,
 };
 
-use crate::curve::{Modulus, PrimeFieldConstants, TinyCurve};
+use crate::traits::{Modulus, PrimeFieldConstants, PrimitiveUint};
 
 #[derive(Default, Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-pub struct FieldElement<const M: u64>(u64);
+pub struct FieldElement<T: PrimitiveUint, const M: u64>(T);
 
-impl<const M: u64> FieldElement<M> {
-    pub(crate) const fn new_unchecked(value: u64) -> Self {
+impl<T, const M: u64> FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    pub(crate) const fn new_unchecked(value: T) -> Self {
         Self(value)
     }
 
-    pub(crate) const fn neg(self) -> Self {
-        Self(if self.0 == 0 { 0 } else { M - self.0 })
+    fn new_unchecked_u64(value: u64) -> Self {
+        debug_assert!(value < M);
+        Self(T::from_u64(value).expect("the value is less than the modulus and therefore fits `T`"))
     }
 
-    fn from_u128(value: u128) -> Self {
-        Self((value % (M as u128)) as u64)
-    }
-}
-
-impl<const M: u64> DefaultIsZeroes for FieldElement<M> {}
-
-impl<const M: u64> From<ScalarPrimitive<TinyCurve>> for FieldElement<M> {
-    fn from(source: ScalarPrimitive<TinyCurve>) -> Self {
-        Self(source.to_uint().as_words()[0])
+    fn to_u64(self) -> u64 {
+        self.0.into()
     }
 }
 
-impl<const M: u64> FromUintUnchecked for FieldElement<M> {
+impl<T, const M: u64> FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn reduce_from_wide(value: T::Wide) -> Self {
+        let modulus = T::from_u64(M).unwrap().into_wide();
+        Self(T::from_wide(value % modulus).unwrap())
+    }
+}
+
+impl<T, const M: u64> DefaultIsZeroes for FieldElement<T, M> where T: PrimitiveUint {}
+
+impl<C, T, const M: u64> From<ScalarPrimitive<C>> for FieldElement<T, M>
+where
+    C: Curve<Uint = U64>,
+    T: PrimitiveUint,
+{
+    fn from(source: ScalarPrimitive<C>) -> Self {
+        Self::from_uint_unchecked(source.to_uint())
+    }
+}
+
+impl<T, const M: u64> FromUintUnchecked for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     type Uint = U64;
 
     fn from_uint_unchecked(uint: Self::Uint) -> Self {
-        Self(uint.as_words()[0])
+        Self::new_unchecked_u64(uint.into())
     }
 }
 
-impl<const M: u64> From<u64> for FieldElement<M> {
+impl<T, const M: u64> From<u64> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     fn from(source: u64) -> Self {
-        Self(source)
+        debug_assert!(source < M);
+        Self::new_unchecked_u64(source)
     }
 }
 
-impl<const M: u64> From<FieldElement<M>> for FieldBytes<TinyCurve> {
-    fn from(source: FieldElement<M>) -> Self {
-        source.0.to_be_bytes().into()
+impl<T, const M: u64> From<FieldElement<T, M>> for GenericArray<u8, typenum::U8>
+where
+    T: PrimitiveUint,
+{
+    fn from(source: FieldElement<T, M>) -> Self {
+        let mut bytes = Self::default();
+        let source_bytes = source.to_u64().to_be_bytes();
+        bytes.copy_from_slice(source_bytes.as_ref());
+        bytes
     }
 }
 
-impl<const M: u64> From<FieldElement<M>> for ScalarPrimitive<TinyCurve> {
-    fn from(source: FieldElement<M>) -> Self {
-        ScalarPrimitive::new(U64::from(source.0)).expect("the value is within range")
+impl<C, T, const M: u64> From<FieldElement<T, M>> for ScalarPrimitive<C>
+where
+    C: Curve,
+    T: PrimitiveUint,
+{
+    fn from(source: FieldElement<T, M>) -> Self {
+        ScalarPrimitive::new(C::Uint::from(source.to_u64())).expect("the value is within range")
     }
 }
 
-impl<const M: u64> From<FieldElement<M>> for <TinyCurve as Curve>::Uint {
-    fn from(source: FieldElement<M>) -> Self {
-        U64::from(source.0)
+impl<T, const M: u64> From<FieldElement<T, M>> for U64
+where
+    T: PrimitiveUint,
+{
+    fn from(source: FieldElement<T, M>) -> Self {
+        U64::from(source.to_u64())
     }
 }
 
-impl<const M: u64> Invert for FieldElement<M> {
+impl<T, const M: u64> Invert for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     type Output = CtOption<Self>;
 
     fn invert(&self) -> Self::Output {
-        let uint_mod =
-            DynResidue::new(&U64::from(self.0), DynResidueParams::new(&TinyCurve::ORDER));
+        let uint_mod = DynResidue::new(&U64::from(*self), DynResidueParams::new(&U64::from(M)));
         let (inv, inv_exists) = uint_mod.invert();
         let result = Self::from_uint_unchecked(inv.retrieve());
         CtOption::new(result, inv_exists.into())
     }
 }
 
-impl<const M: u64> IsHigh for FieldElement<M> {
+impl<T, const M: u64> IsHigh for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     fn is_high(&self) -> Choice {
-        Choice::from((self.0 > (M >> 1)) as u8)
+        Choice::from((self.to_u64() > (M >> 1)) as u8)
     }
 }
 
-impl<const M: u64> Reduce<<TinyCurve as Curve>::Uint> for FieldElement<M> {
-    type Bytes = FieldBytes<TinyCurve>;
+impl<T, const M: u64> Reduce<U64> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    type Bytes = GenericArray<u8, typenum::U8>;
 
-    fn reduce(n: <TinyCurve as Curve>::Uint) -> Self {
-        Self(n.as_words()[0] % M)
+    fn reduce(n: U64) -> Self {
+        Self::from(u64::from(n) % M)
     }
 
     fn reduce_bytes(bytes: &Self::Bytes) -> Self {
-        // TODO: How can it be ensured to be uniform with `impl From<FieldElement<M>> for FieldBytes`?
-        let uint = <TinyCurve as Curve>::Uint::from_be_slice(bytes);
+        let uint = U64::from_be_slice(bytes);
         Self::reduce(uint)
     }
 }
 
-impl<const M: u64> ShrAssign<usize> for FieldElement<M> {
+impl<T, const M: u64> ShrAssign<usize> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     fn shr_assign(&mut self, shift: usize) {
         self.0.shr_assign(shift)
     }
@@ -115,29 +167,41 @@ impl<const M: u64> ShrAssign<usize> for FieldElement<M> {
 
 // Addition
 
-impl<'a, const M: u64> AddAssign<&'a FieldElement<M>> for FieldElement<M> {
-    fn add_assign(&mut self, rhs: &'a FieldElement<M>) {
-        *self = Self::from_u128((self.0 as u128) + (rhs.0 as u128))
+impl<'a, T, const M: u64> AddAssign<&'a FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn add_assign(&mut self, rhs: &'a FieldElement<T, M>) {
+        *self = Self::reduce_from_wide(self.0.into_wide() + rhs.0.into_wide())
     }
 }
 
-impl<const M: u64> AddAssign<FieldElement<M>> for FieldElement<M> {
-    fn add_assign(&mut self, rhs: FieldElement<M>) {
+impl<T, const M: u64> AddAssign<FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn add_assign(&mut self, rhs: FieldElement<T, M>) {
         *self += &rhs
     }
 }
 
-impl<const M: u64> Add<FieldElement<M>> for FieldElement<M> {
-    type Output = FieldElement<M>;
-    fn add(mut self, rhs: FieldElement<M>) -> Self::Output {
+impl<T, const M: u64> Add<FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    type Output = FieldElement<T, M>;
+    fn add(mut self, rhs: FieldElement<T, M>) -> Self::Output {
         self += rhs;
         self
     }
 }
 
-impl<'a, const M: u64> Add<&'a FieldElement<M>> for FieldElement<M> {
-    type Output = FieldElement<M>;
-    fn add(mut self, rhs: &'a FieldElement<M>) -> Self::Output {
+impl<'a, T, const M: u64> Add<&'a FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    type Output = FieldElement<T, M>;
+    fn add(mut self, rhs: &'a FieldElement<T, M>) -> Self::Output {
         self += rhs;
         self
     }
@@ -145,29 +209,43 @@ impl<'a, const M: u64> Add<&'a FieldElement<M>> for FieldElement<M> {
 
 // Subtraction
 
-impl<'a, const M: u64> SubAssign<&'a FieldElement<M>> for FieldElement<M> {
-    fn sub_assign(&mut self, rhs: &'a FieldElement<M>) {
-        *self = Self::from_u128((self.0 as u128) + (M as u128) - (rhs.0 as u128))
+impl<'a, T, const M: u64> SubAssign<&'a FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn sub_assign(&mut self, rhs: &'a FieldElement<T, M>) {
+        *self = Self::reduce_from_wide(
+            self.0.into_wide() + T::from_u64(M).unwrap().into_wide() - rhs.0.into_wide(),
+        )
     }
 }
 
-impl<const M: u64> SubAssign<FieldElement<M>> for FieldElement<M> {
-    fn sub_assign(&mut self, rhs: FieldElement<M>) {
+impl<T, const M: u64> SubAssign<FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn sub_assign(&mut self, rhs: FieldElement<T, M>) {
         *self -= &rhs
     }
 }
 
-impl<const M: u64> Sub<FieldElement<M>> for FieldElement<M> {
-    type Output = FieldElement<M>;
-    fn sub(mut self, rhs: FieldElement<M>) -> Self::Output {
+impl<T, const M: u64> Sub<FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    type Output = FieldElement<T, M>;
+    fn sub(mut self, rhs: FieldElement<T, M>) -> Self::Output {
         self -= rhs;
         self
     }
 }
 
-impl<'a, const M: u64> Sub<&'a FieldElement<M>> for FieldElement<M> {
-    type Output = FieldElement<M>;
-    fn sub(mut self, rhs: &'a FieldElement<M>) -> Self::Output {
+impl<'a, T, const M: u64> Sub<&'a FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    type Output = FieldElement<T, M>;
+    fn sub(mut self, rhs: &'a FieldElement<T, M>) -> Self::Output {
         self -= rhs;
         self
     }
@@ -175,96 +253,134 @@ impl<'a, const M: u64> Sub<&'a FieldElement<M>> for FieldElement<M> {
 
 // Multiplication
 
-impl<'a, const M: u64> MulAssign<&'a FieldElement<M>> for FieldElement<M> {
-    fn mul_assign(&mut self, rhs: &'a FieldElement<M>) {
-        *self = Self::from_u128((self.0 as u128) * (rhs.0 as u128))
+impl<'a, T, const M: u64> MulAssign<&'a FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn mul_assign(&mut self, rhs: &'a FieldElement<T, M>) {
+        *self = Self::reduce_from_wide(self.0.into_wide() * rhs.0.into_wide())
     }
 }
 
-impl<const M: u64> MulAssign<FieldElement<M>> for FieldElement<M> {
-    fn mul_assign(&mut self, rhs: FieldElement<M>) {
+impl<T, const M: u64> MulAssign<FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn mul_assign(&mut self, rhs: FieldElement<T, M>) {
         *self *= &rhs
     }
 }
 
-impl<const M: u64> Mul<FieldElement<M>> for FieldElement<M> {
-    type Output = FieldElement<M>;
-    fn mul(mut self, rhs: FieldElement<M>) -> Self::Output {
+impl<T, const M: u64> Mul<FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    type Output = FieldElement<T, M>;
+    fn mul(mut self, rhs: FieldElement<T, M>) -> Self::Output {
         self *= rhs;
         self
     }
 }
 
-impl<'a, const M: u64> Mul<&'a FieldElement<M>> for FieldElement<M> {
-    type Output = FieldElement<M>;
-    fn mul(mut self, rhs: &'a FieldElement<M>) -> Self::Output {
+impl<'a, T, const M: u64> Mul<&'a FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    type Output = FieldElement<T, M>;
+    fn mul(mut self, rhs: &'a FieldElement<T, M>) -> Self::Output {
         self *= rhs;
         self
     }
 }
 
-impl<const M: u64> Sum for FieldElement<M> {
+impl<T, const M: u64> Sum for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::from(0), Add::add)
     }
 }
 
-impl<'a, const M: u64> Sum<&'a FieldElement<M>> for FieldElement<M> {
-    fn sum<I: Iterator<Item = &'a FieldElement<M>>>(iter: I) -> Self {
+impl<'a, T, const M: u64> Sum<&'a FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn sum<I: Iterator<Item = &'a FieldElement<T, M>>>(iter: I) -> Self {
         iter.fold(Self::from(0), Add::add)
     }
 }
 
-impl<const M: u64> Product for FieldElement<M> {
+impl<T, const M: u64> Product for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::from(1), Mul::mul)
     }
 }
 
-impl<'a, const M: u64> Product<&'a FieldElement<M>> for FieldElement<M> {
-    fn product<I: Iterator<Item = &'a FieldElement<M>>>(iter: I) -> Self {
+impl<'a, T, const M: u64> Product<&'a FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn product<I: Iterator<Item = &'a FieldElement<T, M>>>(iter: I) -> Self {
         iter.fold(Self::from(1), Mul::mul)
     }
 }
 
-impl<const M: u64> Neg for FieldElement<M> {
+impl<T, const M: u64> Neg for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     type Output = Self;
     fn neg(self) -> Self::Output {
-        self.neg()
+        Self(if self.0 == T::ZERO {
+            T::ZERO
+        } else {
+            T::from_u64(M).unwrap() - self.0
+        })
     }
 }
 
-impl<const M: u64> ConstantTimeEq for FieldElement<M> {
+impl<T, const M: u64> ConstantTimeEq for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     fn ct_eq(&self, rhs: &Self) -> Choice {
         self.0.ct_eq(&rhs.0)
     }
 }
 
-impl<const M: u64> ConditionallySelectable for FieldElement<M> {
+impl<T, const M: u64> ConditionallySelectable for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
     fn conditional_select(lhs: &Self, rhs: &Self, choice: Choice) -> Self {
-        Self(u64::conditional_select(&lhs.0, &rhs.0, choice))
+        Self(T::conditional_select(&lhs.0, &rhs.0, choice))
     }
 }
 
-impl<const M: u64> Field for FieldElement<M>
+impl<T, const M: u64> Field for FieldElement<T, M>
 where
-    Modulus<M>: PrimeFieldConstants,
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
 {
-    const ZERO: Self = Self(0);
-    const ONE: Self = Self(1);
+    const ZERO: Self = Self(T::ZERO);
+    const ONE: Self = Self(T::ONE);
 
     fn random(mut rng: impl RngCore) -> Self {
-        let mut buffer = [0u8; 16];
-        rng.fill_bytes(&mut buffer);
-        Self::from_u128(u128::from_be_bytes(buffer))
+        let mut buffer = T::Wide::ZERO.to_be_bytes();
+        rng.fill_bytes(buffer.as_mut());
+        Self::reduce_from_wide(T::Wide::from_be_bytes(&buffer))
     }
 
     fn square(&self) -> Self {
-        Self::from_u128((self.0 as u128) * (self.0 as u128))
+        Self::reduce_from_wide(self.0.into_wide() * self.0.into_wide())
     }
 
     fn double(&self) -> Self {
-        Self::from_u128((self.0 as u128) << 1)
+        Self::reduce_from_wide(self.0.into_wide() << 1)
     }
 
     fn invert(&self) -> CtOption<Self> {
@@ -272,44 +388,48 @@ where
     }
 
     fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
-        elliptic_curve::ff::helpers::sqrt_ratio_generic(num, div)
+        sqrt_ratio_generic(num, div)
     }
 }
 
-impl<const M: u64> PrimeField for FieldElement<M>
+impl<T, const M: u64> PrimeField for FieldElement<T, M>
 where
-    Modulus<M>: PrimeFieldConstants,
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
 {
-    type Repr = FieldBytes<TinyCurve>;
+    type Repr = <Modulus<T, M> as PrimeFieldConstants<T>>::Repr;
 
-    const MODULUS: &'static str = Modulus::<M>::MODULUS;
-    const NUM_BITS: u32 = Modulus::<M>::NUM_BITS;
-    const CAPACITY: u32 = Modulus::<M>::CAPACITY;
-    const TWO_INV: Self = FieldElement::new_unchecked(Modulus::<M>::TWO_INV);
+    const MODULUS: &'static str = Modulus::<T, M>::MODULUS;
+    const NUM_BITS: u32 = Modulus::<T, M>::NUM_BITS;
+    const CAPACITY: u32 = Modulus::<T, M>::CAPACITY;
+    const TWO_INV: Self = FieldElement::new_unchecked(Modulus::<T, M>::TWO_INV);
     const MULTIPLICATIVE_GENERATOR: Self =
-        FieldElement::new_unchecked(Modulus::<M>::MULTIPLICATIVE_GENERATOR);
-    const S: u32 = Modulus::<M>::S;
-    const ROOT_OF_UNITY: Self = FieldElement::new_unchecked(Modulus::<M>::ROOT_OF_UNITY);
-    const ROOT_OF_UNITY_INV: Self = FieldElement::new_unchecked(Modulus::<M>::ROOT_OF_UNITY_INV);
-    const DELTA: Self = FieldElement::new_unchecked(Modulus::<M>::DELTA);
+        FieldElement::new_unchecked(Modulus::<T, M>::MULTIPLICATIVE_GENERATOR);
+    const S: u32 = Modulus::<T, M>::S;
+    const ROOT_OF_UNITY: Self = FieldElement::new_unchecked(Modulus::<T, M>::ROOT_OF_UNITY);
+    const ROOT_OF_UNITY_INV: Self = FieldElement::new_unchecked(Modulus::<T, M>::ROOT_OF_UNITY_INV);
+    const DELTA: Self = FieldElement::new_unchecked(Modulus::<T, M>::DELTA);
 
     fn from_repr(repr: Self::Repr) -> CtOption<Self> {
         let value = u64::from_be_bytes(repr.into());
         let within_range = Choice::from((value < M) as u8);
-        CtOption::new(Self(value), within_range)
+        CtOption::new(Self::new_unchecked_u64(value), within_range)
     }
 
     fn to_repr(&self) -> Self::Repr {
-        self.0.to_be_bytes().into()
+        self.to_u64().to_be_bytes().into()
     }
 
     fn is_odd(&self) -> Choice {
-        Choice::from(self.0 as u8 & 1)
+        Choice::from((self.to_u64() & 1) as u8)
     }
 }
 
-impl<const M: u64> AsRef<FieldElement<M>> for FieldElement<M> {
-    fn as_ref(&self) -> &FieldElement<M> {
+impl<T, const M: u64> AsRef<FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn as_ref(&self) -> &FieldElement<T, M> {
         self
     }
 }
