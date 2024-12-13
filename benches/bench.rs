@@ -1,8 +1,8 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use rand_core::OsRng;
-use primeorder::elliptic_curve::{ProjectivePoint, ops::MulByGenerator, Field, CurveArithmetic};
-use tiny_curve::{TinyCurve16, TinyCurve32, TinyCurve64};
 use k256::Secp256k1;
+use primeorder::elliptic_curve::{ops::MulByGenerator, CurveArithmetic, Field, ProjectivePoint};
+use rand_core::OsRng;
+use tiny_curve::{TinyCurve16, TinyCurve32, TinyCurve64};
 
 fn bench_arithmetic(c: &mut Criterion) {
     let mut group = c.benchmark_group("arithmetic");
