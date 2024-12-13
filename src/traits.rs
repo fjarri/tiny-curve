@@ -30,43 +30,48 @@ pub trait PrimeFieldConstants<T> {
 
 pub struct Modulus<T, const M: u64>(PhantomData<T>);
 
-pub trait HasWide: Sized
-where
-    <Self::Wide as FromBytes>::Bytes: Sized,
-    <Self::Wide as ToBytes>::Bytes: Sized,
-    Self::Wide: ToBytes<Bytes = <Self::Wide as FromBytes>::Bytes>,
-{
+pub trait HasWide: Sized {
     type Wide: WideUint;
-    fn into_wide(self) -> Self::Wide;
-    fn from_wide(wide: Self::Wide) -> Option<Self>;
+    fn to_wide(self) -> Self::Wide;
+    fn from_wide_unchecked(source: Self::Wide) -> Self;
+    fn try_from_wide(source: Self::Wide) -> Option<Self>;
 }
 
 impl HasWide for u16 {
     type Wide = u32;
-    fn into_wide(self) -> Self::Wide {
+    fn to_wide(self) -> Self::Wide {
         self.into()
     }
-    fn from_wide(wide: Self::Wide) -> Option<Self> {
+    fn from_wide_unchecked(source: Self::Wide) -> Self {
+        source as Self
+    }
+    fn try_from_wide(wide: Self::Wide) -> Option<Self> {
         Self::try_from(wide).ok()
     }
 }
 
 impl HasWide for u32 {
     type Wide = u64;
-    fn into_wide(self) -> Self::Wide {
+    fn to_wide(self) -> Self::Wide {
         self.into()
     }
-    fn from_wide(wide: Self::Wide) -> Option<Self> {
+    fn from_wide_unchecked(source: Self::Wide) -> Self {
+        source as Self
+    }
+    fn try_from_wide(wide: Self::Wide) -> Option<Self> {
         Self::try_from(wide).ok()
     }
 }
 
 impl HasWide for u64 {
     type Wide = u128;
-    fn into_wide(self) -> Self::Wide {
+    fn to_wide(self) -> Self::Wide {
         self.into()
     }
-    fn from_wide(wide: Self::Wide) -> Option<Self> {
+    fn from_wide_unchecked(source: Self::Wide) -> Self {
+        source as Self
+    }
+    fn try_from_wide(wide: Self::Wide) -> Option<Self> {
         Self::try_from(wide).ok()
     }
 }
@@ -91,13 +96,27 @@ pub trait PrimitiveUint:
     + HasWide
     + Into<u64>
 {
+    const BITS: u32;
 }
 
-pub trait WideUint: Unsigned + FromBytes + ConstZero + Shl<usize, Output = Self> {}
+pub trait WideUint:
+    Unsigned
+    + ToBytes<Bytes = <Self as FromBytes>::Bytes>
+    + FromBytes<Bytes: Sized>
+    + ConstZero
+    + Shl<usize, Output = Self>
+{
+}
 
-impl PrimitiveUint for u16 {}
-impl PrimitiveUint for u32 {}
-impl PrimitiveUint for u64 {}
+impl PrimitiveUint for u16 {
+    const BITS: u32 = Self::BITS;
+}
+impl PrimitiveUint for u32 {
+    const BITS: u32 = Self::BITS;
+}
+impl PrimitiveUint for u64 {
+    const BITS: u32 = Self::BITS;
+}
 
 impl WideUint for u32 {}
 impl WideUint for u64 {}

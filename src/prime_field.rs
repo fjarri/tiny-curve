@@ -48,8 +48,8 @@ where
     T: PrimitiveUint,
 {
     fn reduce_from_wide(value: T::Wide) -> Self {
-        let modulus = T::from_u64(M).unwrap().into_wide();
-        Self(T::from_wide(value % modulus).unwrap())
+        let modulus = T::from_u64(M).unwrap().to_wide();
+        Self(T::try_from_wide(value % modulus).unwrap())
     }
 }
 
@@ -172,7 +172,7 @@ where
     T: PrimitiveUint,
 {
     fn add_assign(&mut self, rhs: &'a FieldElement<T, M>) {
-        *self = Self::reduce_from_wide(self.0.into_wide() + rhs.0.into_wide())
+        *self = Self::reduce_from_wide(self.0.to_wide() + rhs.0.to_wide())
     }
 }
 
@@ -215,7 +215,7 @@ where
 {
     fn sub_assign(&mut self, rhs: &'a FieldElement<T, M>) {
         *self = Self::reduce_from_wide(
-            self.0.into_wide() + T::from_u64(M).unwrap().into_wide() - rhs.0.into_wide(),
+            self.0.to_wide() + T::from_u64(M).unwrap().to_wide() - rhs.0.to_wide(),
         )
     }
 }
@@ -258,7 +258,7 @@ where
     T: PrimitiveUint,
 {
     fn mul_assign(&mut self, rhs: &'a FieldElement<T, M>) {
-        *self = Self::reduce_from_wide(self.0.into_wide() * rhs.0.into_wide())
+        *self = Self::reduce_from_wide(self.0.to_wide() * rhs.0.to_wide())
     }
 }
 
@@ -376,11 +376,11 @@ where
     }
 
     fn square(&self) -> Self {
-        Self::reduce_from_wide(self.0.into_wide() * self.0.into_wide())
+        Self::reduce_from_wide(self.0.to_wide() * self.0.to_wide())
     }
 
     fn double(&self) -> Self {
-        Self::reduce_from_wide(self.0.into_wide() << 1)
+        Self::reduce_from_wide(self.0.to_wide() << 1)
     }
 
     fn invert(&self) -> CtOption<Self> {
