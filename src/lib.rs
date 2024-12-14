@@ -17,6 +17,7 @@ mod curve16;
 mod curve32;
 mod curve64;
 mod prime_field;
+mod reciprocal;
 mod traits;
 
 pub use curve16::TinyCurve16;

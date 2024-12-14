@@ -43,16 +43,6 @@ where
     }
 }
 
-impl<T, const M: u64> FieldElement<T, M>
-where
-    T: PrimitiveUint,
-{
-    fn reduce_from_wide(value: T::Wide) -> Self {
-        let modulus = T::from_u64(M).unwrap().to_wide();
-        Self(T::try_from_wide(value % modulus).unwrap())
-    }
-}
-
 impl<T, const M: u64> DefaultIsZeroes for FieldElement<T, M> where T: PrimitiveUint {}
 
 impl<C, T, const M: u64> From<ScalarPrimitive<C>> for FieldElement<T, M>
@@ -172,7 +162,12 @@ where
     T: PrimitiveUint,
 {
     fn add_assign(&mut self, rhs: &'a FieldElement<T, M>) {
-        *self = Self::reduce_from_wide(self.0.to_wide() + rhs.0.to_wide())
+        let modulus = T::from_u64(M).expect("the modulus fits into `T`");
+        let mut result = self.0.wrapping_add(&rhs.0);
+        if result >= modulus || result < self.0 {
+            result = result.wrapping_sub(&modulus);
+        }
+        *self = Self(result)
     }
 }
 
@@ -214,9 +209,12 @@ where
     T: PrimitiveUint,
 {
     fn sub_assign(&mut self, rhs: &'a FieldElement<T, M>) {
-        *self = Self::reduce_from_wide(
-            self.0.to_wide() + T::from_u64(M).unwrap().to_wide() - rhs.0.to_wide(),
-        )
+        let modulus = T::from_u64(M).expect("the modulus fits into `T`");
+        let mut result = self.0.wrapping_sub(&rhs.0);
+        if self.0 < rhs.0 {
+            result = result.wrapping_add(&modulus);
+        }
+        *self = Self(result)
     }
 }
 
@@ -258,7 +256,7 @@ where
     T: PrimitiveUint,
 {
     fn mul_assign(&mut self, rhs: &'a FieldElement<T, M>) {
-        *self = Self::reduce_from_wide(self.0.to_wide() * rhs.0.to_wide())
+        *self = Self(T::reduce_from_wide::<M>(self.0.to_wide() * rhs.0.to_wide()))
     }
 }
 
@@ -338,7 +336,7 @@ where
         Self(if self.0 == T::ZERO {
             T::ZERO
         } else {
-            T::from_u64(M).unwrap() - self.0
+            T::from_u64(M).expect("the modulus fits into `T`") - self.0
         })
     }
 }
@@ -372,15 +370,17 @@ where
     fn random(mut rng: impl RngCore) -> Self {
         let mut buffer = T::Wide::ZERO.to_be_bytes();
         rng.fill_bytes(buffer.as_mut());
-        Self::reduce_from_wide(T::Wide::from_be_bytes(&buffer))
+        Self(T::reduce_from_wide::<M>(T::Wide::from_be_bytes(&buffer)))
     }
 
     fn square(&self) -> Self {
-        Self::reduce_from_wide(self.0.to_wide() * self.0.to_wide())
+        Self(T::reduce_from_wide::<M>(
+            self.0.to_wide() * self.0.to_wide(),
+        ))
     }
 
     fn double(&self) -> Self {
-        Self::reduce_from_wide(self.0.to_wide() << 1)
+        *self + self
     }
 
     fn invert(&self) -> CtOption<Self> {
