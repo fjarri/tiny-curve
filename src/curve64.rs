@@ -71,3 +71,33 @@ impl PrimeCurveParams for TinyCurve64 {
         FieldElement::new_unchecked(9413656544546528568),
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::TinyCurve64;
+    use primeorder::elliptic_curve::{
+        bigint::U64,
+        ops::{MulByGenerator, Reduce},
+        CurveArithmetic, ProjectivePoint,
+    };
+    use proptest::prelude::*;
+
+    type Scalar = <TinyCurve64 as CurveArithmetic>::Scalar;
+    type Point = ProjectivePoint<TinyCurve64>;
+
+    prop_compose! {
+        /// Generate a random odd modulus.
+        fn scalar()(n in any::<u64>()) -> Scalar {
+            Scalar::reduce(U64::from(n))
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn mul_by_generator(x in scalar(), y in scalar()) {
+            let p1 = Point::mul_by_generator(&x) + Point::mul_by_generator(&y);
+            let p2 = Point::mul_by_generator(&(x + y));
+            assert_eq!(p1, p2);
+        }
+    }
+}
