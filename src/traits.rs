@@ -42,7 +42,6 @@ pub trait HasWide: Sized {
     type Wide: WideUint;
     fn to_wide(self) -> Self::Wide;
     fn from_wide_unchecked(source: Self::Wide) -> Self;
-    fn try_from_wide(source: Self::Wide) -> Option<Self>;
 }
 
 impl HasWide for u16 {
@@ -52,9 +51,6 @@ impl HasWide for u16 {
     }
     fn from_wide_unchecked(source: Self::Wide) -> Self {
         source as Self
-    }
-    fn try_from_wide(wide: Self::Wide) -> Option<Self> {
-        Self::try_from(wide).ok()
     }
 }
 
@@ -66,9 +62,6 @@ impl HasWide for u32 {
     fn from_wide_unchecked(source: Self::Wide) -> Self {
         source as Self
     }
-    fn try_from_wide(wide: Self::Wide) -> Option<Self> {
-        Self::try_from(wide).ok()
-    }
 }
 
 impl HasWide for u64 {
@@ -78,9 +71,6 @@ impl HasWide for u64 {
     }
     fn from_wide_unchecked(source: Self::Wide) -> Self {
         source as Self
-    }
-    fn try_from_wide(wide: Self::Wide) -> Option<Self> {
-        Self::try_from(wide).ok()
     }
 }
 
