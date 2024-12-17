@@ -16,6 +16,8 @@
 mod curve16;
 mod curve32;
 mod curve64;
+mod ecdsa;
+mod hash;
 mod prime_field;
 mod reciprocal;
 mod traits;

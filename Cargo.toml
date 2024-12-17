@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 primeorder = "0.13"
 num-traits = "0.2"
+ecdsa = "0.16"
+sha2 = "0.10"
 
 [dev-dependencies]
 criterion = "0.5"
