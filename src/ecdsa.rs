@@ -31,15 +31,15 @@ where
 }
 
 impl DigestPrimitive for TinyCurve16 {
-    type Digest = TinyHash;
+    type Digest = TinyHash<2>;
 }
 
 impl DigestPrimitive for TinyCurve32 {
-    type Digest = TinyHash;
+    type Digest = TinyHash<4>;
 }
 
 impl DigestPrimitive for TinyCurve64 {
-    type Digest = TinyHash;
+    type Digest = TinyHash<8>;
 }
 
 #[cfg(test)]

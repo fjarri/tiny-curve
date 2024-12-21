@@ -47,6 +47,24 @@ fn bench_ecdsa(c: &mut Criterion) {
     let mut group = c.benchmark_group("ECDSA");
 
     let prehash = b"12345678";
+    group.bench_function("Curve16, sign", |b| {
+        b.iter_batched(
+            || SigningKey::<TinyCurve16>::random(&mut OsRng),
+            |sk| sk.sign_prehash_recoverable(prehash),
+            BatchSize::SmallInput,
+        )
+    });
+
+    let prehash = b"12345678";
+    group.bench_function("Curve32, sign", |b| {
+        b.iter_batched(
+            || SigningKey::<TinyCurve32>::random(&mut OsRng),
+            |sk| sk.sign_prehash_recoverable(prehash),
+            BatchSize::SmallInput,
+        )
+    });
+
+    let prehash = b"12345678";
     group.bench_function("Curve64, sign", |b| {
         b.iter_batched(
             || SigningKey::<TinyCurve64>::random(&mut OsRng),
