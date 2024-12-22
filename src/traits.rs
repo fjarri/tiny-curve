@@ -17,7 +17,8 @@ pub trait PrimeFieldConstants<T> {
         + Copy
         + From<[u8; 8]>
         + Into<[u8; 8]>;
-    const MODULUS: &'static str;
+    const MODULUS_STR: &'static str;
+    const MODULUS: T;
     const NUM_BITS: u32;
     const CAPACITY: u32;
     const TWO_INV: T;

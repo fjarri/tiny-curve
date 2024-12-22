@@ -40,6 +40,41 @@ where
     }
 }
 
+impl<T, const M: u64> FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+    #[cfg(test)]
+    pub(crate) const MODULUS: T = Modulus::<T, M>::MODULUS;
+
+    // TODO: needed by `impl_primefield_tests!`. Ideally it should just use arithmetic ops.
+    #[cfg(test)]
+    pub(crate) fn add(&self, rhs: &Self) -> Self {
+        let modulus = T::from_u64(M).expect("the modulus fits into `T`");
+        let mut result = self.0.wrapping_add(&rhs.0);
+        if result >= modulus || result < self.0 {
+            result = result.wrapping_sub(&modulus);
+        }
+        Self(result)
+    }
+
+    // TODO: needed by `impl_primefield_tests!`. Ideally it should just use arithmetic ops.
+    #[cfg(test)]
+    pub(crate) fn multiply(&self, rhs: &Self) -> Self {
+        Self(T::reduce_from_wide::<M>(self.0.to_wide() * rhs.0.to_wide()))
+    }
+
+    pub(crate) fn sqrt(&self) -> CtOption<Self> {
+        // All our moduli are chosen so that they are 3 mod 4.
+        debug_assert!(M & 3 == 3);
+        // This means calculating the square root can be done via exponentiation.
+        let res = self.pow_vartime([(M >> 2) + 1]);
+        let is_square = res.square().ct_eq(self);
+        CtOption::new(res, is_square)
+    }
+}
+
 impl<T, const M: u64> DefaultIsZeroes for FieldElement<T, M> where T: PrimitiveUint {}
 
 impl<C, T, const M: u64> From<ScalarPrimitive<C>> for FieldElement<T, M>
@@ -68,6 +103,19 @@ where
     T: PrimitiveUint,
 {
     fn from(source: u64) -> Self {
+        debug_assert!(source < M);
+        Self::new_unchecked_u64(source)
+    }
+}
+
+// TODO: needed by `impl_primefield_tests!`.
+#[cfg(test)]
+impl<T, const M: u64> From<u32> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn from(source: u32) -> Self {
+        let source = source.into();
         debug_assert!(source < M);
         Self::new_unchecked_u64(source)
     }
@@ -295,7 +343,7 @@ where
     T: PrimitiveUint,
 {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Self::from(0), Add::add)
+        iter.fold(Self::from(0u64), Add::add)
     }
 }
 
@@ -304,7 +352,7 @@ where
     T: PrimitiveUint,
 {
     fn sum<I: Iterator<Item = &'a FieldElement<T, M>>>(iter: I) -> Self {
-        iter.fold(Self::from(0), Add::add)
+        iter.fold(Self::from(0u64), Add::add)
     }
 }
 
@@ -313,7 +361,7 @@ where
     T: PrimitiveUint,
 {
     fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(Self::from(1), Mul::mul)
+        iter.fold(Self::from(1u64), Mul::mul)
     }
 }
 
@@ -322,7 +370,7 @@ where
     T: PrimitiveUint,
 {
     fn product<I: Iterator<Item = &'a FieldElement<T, M>>>(iter: I) -> Self {
-        iter.fold(Self::from(1), Mul::mul)
+        iter.fold(Self::from(1u64), Mul::mul)
     }
 }
 
@@ -386,7 +434,13 @@ where
         <Self as Invert>::invert(self)
     }
 
+    fn sqrt(&self) -> CtOption<Self> {
+        self.sqrt()
+    }
+
     fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
+        // Note that this relies on `Self::sqrt()`,
+        // so in order to avoid infinite recurrence, that has to be overridden as well.
         sqrt_ratio_generic(num, div)
     }
 }
@@ -398,7 +452,7 @@ where
 {
     type Repr = <Modulus<T, M> as PrimeFieldConstants<T>>::Repr;
 
-    const MODULUS: &'static str = Modulus::<T, M>::MODULUS;
+    const MODULUS: &'static str = Modulus::<T, M>::MODULUS_STR;
     const NUM_BITS: u32 = Modulus::<T, M>::NUM_BITS;
     const CAPACITY: u32 = Modulus::<T, M>::CAPACITY;
     const TWO_INV: Self = FieldElement::new_unchecked(Modulus::<T, M>::TWO_INV);

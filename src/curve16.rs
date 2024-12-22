@@ -11,33 +11,35 @@ use crate::{
     traits::{Modulus, PrimeFieldConstants},
 };
 
-const ORDER: u64 = 0xfe9f;
-const FIELD_MODULUS: u64 = 0xfff1;
+const ORDER: u64 = 0xfe93;
+const FIELD_MODULUS: u64 = 0xffa7;
 
 impl PrimeFieldConstants<u16> for Modulus<u16, FIELD_MODULUS> {
     type Repr = FieldBytes<TinyCurve16>;
-    const MODULUS: &'static str = "0xfff1";
+    const MODULUS_STR: &'static str = "0xffa7";
+    const MODULUS: u16 = FIELD_MODULUS as u16;
     const NUM_BITS: u32 = 16;
     const CAPACITY: u32 = 15;
-    const TWO_INV: u16 = 0x7ff9;
-    const MULTIPLICATIVE_GENERATOR: u16 = 0x11;
-    const S: u32 = 4;
-    const ROOT_OF_UNITY: u16 = 0xf0c8;
-    const ROOT_OF_UNITY_INV: u16 = 0x4ce5;
-    const DELTA: u16 = 39958;
+    const TWO_INV: u16 = 0x7fd4;
+    const MULTIPLICATIVE_GENERATOR: u16 = 5;
+    const S: u32 = 1;
+    const ROOT_OF_UNITY: u16 = 0xffa6;
+    const ROOT_OF_UNITY_INV: u16 = 0xffa6;
+    const DELTA: u16 = 25;
 }
 
 impl PrimeFieldConstants<u16> for Modulus<u16, ORDER> {
     type Repr = FieldBytes<TinyCurve16>;
-    const MODULUS: &'static str = "0xfe9f";
+    const MODULUS_STR: &'static str = "0xfe93";
+    const MODULUS: u16 = ORDER as u16;
     const NUM_BITS: u32 = 16;
     const CAPACITY: u32 = 15;
-    const TWO_INV: u16 = 0x7f50;
-    const MULTIPLICATIVE_GENERATOR: u16 = 5;
+    const TWO_INV: u16 = 0x7f4a;
+    const MULTIPLICATIVE_GENERATOR: u16 = 2;
     const S: u32 = 1;
-    const ROOT_OF_UNITY: u16 = 0xfe9e;
-    const ROOT_OF_UNITY_INV: u16 = 0xfe9e;
-    const DELTA: u16 = 25;
+    const ROOT_OF_UNITY: u16 = 0xfe92;
+    const ROOT_OF_UNITY_INV: u16 = 0xfe92;
+    const DELTA: u16 = 4;
 }
 
 /// An elliptic curve with a 32-bit order.
@@ -65,10 +67,10 @@ impl PrimeCurveParams for TinyCurve16 {
     type PointArithmetic = EquationAIsMinusThree;
 
     const EQUATION_A: Self::FieldElement = FieldElement::new_unchecked(FIELD_MODULUS as u16 - 3);
-    const EQUATION_B: Self::FieldElement = FieldElement::new_unchecked(10);
+    const EQUATION_B: Self::FieldElement = FieldElement::new_unchecked(7);
     const GENERATOR: (Self::FieldElement, Self::FieldElement) = (
-        FieldElement::new_unchecked(48073),
-        FieldElement::new_unchecked(20668),
+        FieldElement::new_unchecked(23947),
+        FieldElement::new_unchecked(53757),
     );
 }
 
@@ -100,4 +102,38 @@ mod tests {
             assert_eq!(p1, p2);
         }
     }
+}
+
+#[cfg(test)]
+mod tests_scalar {
+    use primeorder::{elliptic_curve::CurveArithmetic, Field, PrimeField};
+
+    use super::TinyCurve16;
+
+    type F = <TinyCurve16 as CurveArithmetic>::Scalar;
+
+    primeorder::impl_field_identity_tests!(F);
+    primeorder::impl_field_invert_tests!(F);
+    primeorder::impl_field_sqrt_tests!(F);
+
+    // t = (modulus - 1) >> S
+    const T: [u64; 1] = [(F::MODULUS - 1) as u64 >> F::S];
+    primeorder::impl_primefield_tests!(F, T);
+}
+
+#[cfg(test)]
+mod tests_field_element {
+    use primeorder::{Field, PrimeCurveParams, PrimeField};
+
+    use super::TinyCurve16;
+
+    type F = <TinyCurve16 as PrimeCurveParams>::FieldElement;
+
+    primeorder::impl_field_identity_tests!(F);
+    primeorder::impl_field_invert_tests!(F);
+    primeorder::impl_field_sqrt_tests!(F);
+
+    // t = (modulus - 1) >> S
+    const T: [u64; 1] = [(F::MODULUS - 1) as u64 >> F::S];
+    primeorder::impl_primefield_tests!(F, T);
 }
