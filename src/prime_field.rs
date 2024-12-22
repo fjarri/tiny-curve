@@ -434,7 +434,7 @@ where
 }
 
 /// Calculates modular inverse of `a` modulo `b`.
-fn modular_inverse<T: PrimitiveUint>(a: T, modulus: T) -> Option<T> {
+pub(crate) fn modular_inverse<T: PrimitiveUint>(a: T, modulus: T) -> Option<T> {
     // Using Extended Euclidean algorithm.
     // Essentially, it finds `n` and `m` such that `a * m + b * n = gcd(a, b)`.
     // If `gcd(a, b) = 1` (which is required for there to be an inverse),

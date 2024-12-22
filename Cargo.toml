@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 primeorder = "0.13"
 num-traits = "0.2"
-ecdsa = "0.16"
+ecdsa = { version = "0.16", features = ["arithmetic", "hazmat"] }
 sha2 = "0.10"
 
 [dev-dependencies]
