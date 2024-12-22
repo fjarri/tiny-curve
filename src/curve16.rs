@@ -42,7 +42,7 @@ impl PrimeFieldConstants<u16> for Modulus<u16, ORDER> {
     const DELTA: u16 = 4;
 }
 
-/// An elliptic curve with a 32-bit order.
+/// An elliptic curve with a 16-bit order.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TinyCurve16;
 
