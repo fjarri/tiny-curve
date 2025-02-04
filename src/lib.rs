@@ -13,6 +13,16 @@
 )]
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
 
+//! ## `serde` support
+//!
+//! When the `serde` feature of this crate is enabled, `Serialize` and
+//! `Deserialize` are impl'd for the following types:
+//!
+//! - [`AffinePoint`]
+//! - [`Scalar`]
+//!
+//! Please see type-specific documentation for more information.
+
 mod curve16;
 mod curve32;
 mod curve64;
