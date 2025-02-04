@@ -22,6 +22,9 @@ use crate::{
     traits::{Modulus, PrimeFieldConstants, PrimitiveUint},
 };
 
+#[cfg(feature = "serde")]
+use serdect::serde::{de, ser, Deserialize, Serialize};
+
 #[derive(Default, Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct FieldElement<T: PrimitiveUint, const M: u64>(T);
 
@@ -467,5 +470,31 @@ where
 {
     fn as_ref(&self) -> &FieldElement<T, M> {
         self
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<T, const M: u64> Serialize for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        todo!()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T, const M: u64> Deserialize<'de> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: de::Deserializer<'de>,
+    {
+        todo!()
     }
 }
