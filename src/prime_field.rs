@@ -22,12 +22,8 @@ use crate::{
     traits::{Modulus, PrimeFieldConstants, PrimitiveUint},
 };
 
-#[cfg(feature = "serde")]
-use serdect::serde::{Deserialize, Serialize};
-
 #[derive(Default, Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "serdect::serde"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FieldElement<T: PrimitiveUint, const M: u64>(T);
 
 impl<T, const M: u64> FieldElement<T, M>
