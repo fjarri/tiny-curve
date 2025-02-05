@@ -16,12 +16,7 @@
 //! ## `serde` support
 //!
 //! When the `serde` feature of this crate is enabled, `Serialize` and
-//! `Deserialize` are impl'd for the following types:
-//!
-//! - [`AffinePoint`]
-//! - [`Scalar`]
-//!
-//! Please see type-specific documentation for more information.
+//! `Deserialize` are impl'd for [`FieldElement`].
 
 mod curve16;
 mod curve32;
