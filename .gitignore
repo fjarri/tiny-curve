@@ -1,4 +1,2 @@
+Cargo.lock
 /target
-*.sublime-project
-*.sublime-workspace
-*.py
