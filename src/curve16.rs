@@ -1,13 +1,11 @@
 use primeorder::{
-    elliptic_curve::{
-        bigint::U64, generic_array::typenum, Curve, CurveArithmetic, FieldBytes, FieldBytesEncoding,
-    },
+    elliptic_curve::{Curve, CurveArithmetic, FieldBytes, FieldBytesEncoding},
     point_arithmetic::EquationAIsMinusThree,
     AffinePoint, PrimeCurve, PrimeCurveParams, ProjectivePoint,
 };
 
 use crate::{
-    prime_field::FieldElement,
+    prime_field::{FieldElement, ReprSizeTypenum, ReprUint},
     traits::{Modulus, PrimeFieldConstants},
 };
 
@@ -47,8 +45,8 @@ impl PrimeFieldConstants<u16> for Modulus<u16, ORDER> {
 pub struct TinyCurve16;
 
 impl Curve for TinyCurve16 {
-    type FieldBytesSize = typenum::U8;
-    type Uint = U64;
+    type FieldBytesSize = ReprSizeTypenum;
+    type Uint = ReprUint;
     const ORDER: Self::Uint = Self::Uint::from_u64(ORDER);
 }
 
@@ -76,13 +74,14 @@ impl PrimeCurveParams for TinyCurve16 {
 
 #[cfg(test)]
 mod tests {
-    use super::TinyCurve16;
     use primeorder::elliptic_curve::{
-        bigint::U64,
         ops::{MulByGenerator, Reduce},
         CurveArithmetic, ProjectivePoint,
     };
     use proptest::prelude::*;
+
+    use super::TinyCurve16;
+    use crate::prime_field::ReprUint;
 
     type Scalar = <TinyCurve16 as CurveArithmetic>::Scalar;
     type Point = ProjectivePoint<TinyCurve16>;
@@ -90,7 +89,7 @@ mod tests {
     prop_compose! {
         /// Generate a random odd modulus.
         fn scalar()(n in any::<u64>()) -> Scalar {
-            Scalar::reduce(U64::from(n))
+            Scalar::reduce(ReprUint::from(n))
         }
     }
 
