@@ -87,3 +87,15 @@ jobs:
         with:
           command: fmt
           args: --all -- --check
+
+  # Mimics the setup of docs.rs, but fails on warnings
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          profile: minimal
+      - run: env RUSTDOCFLAGS='--cfg docsrs -D warnings' cargo doc --all-features
