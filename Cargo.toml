@@ -16,7 +16,7 @@ ecdsa = { version = "0.16", default-features = false, features = ["signing", "ve
 sha2 = { version = "0.10", default-features = false }
 
 # Optional dependencies
-serde = { version = "1", optional = true, default-features = false }
+serde = { version = "1", optional = true, default-features = false, features = ["serde_derive"] }
 
 [dev-dependencies]
 criterion = "0.5"
