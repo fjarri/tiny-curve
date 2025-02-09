@@ -2,7 +2,7 @@
 //! equal to the size of the field element.
 //! No real hash functions have an output that small, so we make our own.
 
-use primeorder::elliptic_curve::generic_array::{typenum, GenericArray};
+use primeorder::elliptic_curve::generic_array::GenericArray;
 use sha2::{
     digest::{
         core_api::BlockSizeUser, Digest, FixedOutput, FixedOutputReset, HashMarker, Output,
@@ -10,6 +10,8 @@ use sha2::{
     },
     Sha256,
 };
+
+use crate::prime_field::ReprSizeTypenum;
 
 // TODO: this only needs the `BYTES` parametrization to work around
 // https://github.com/RustCrypto/signatures/issues/880
@@ -28,13 +30,15 @@ impl<const BYTES: usize> Update for TinyHash<BYTES> {
 impl<const BYTES: usize> FixedOutput for TinyHash<BYTES> {
     fn finalize_into(self, out: &mut Output<Self>) {
         let full_output = self.0.finalize();
-        AsMut::<[u8]>::as_mut(out).copy_from_slice(&full_output[..8]);
-        AsMut::<[u8]>::as_mut(out)[..8 - BYTES].fill(0);
+        let output_len = out.len();
+        debug_assert!(output_len <= full_output.len());
+        AsMut::<[u8]>::as_mut(out).copy_from_slice(&full_output[..output_len]);
+        AsMut::<[u8]>::as_mut(out)[..output_len - BYTES].fill(0);
     }
 }
 
 impl<const BYTES: usize> OutputSizeUser for TinyHash<BYTES> {
-    type OutputSize = typenum::U8;
+    type OutputSize = ReprSizeTypenum;
 }
 
 impl<const BYTES: usize> Reset for TinyHash<BYTES> {
@@ -48,10 +52,8 @@ impl<const BYTES: usize> FixedOutputReset for TinyHash<BYTES> {
         &mut self,
         out: &mut GenericArray<u8, <Self as OutputSizeUser>::OutputSize>,
     ) {
-        let mut full_output = Output::<Sha256>::default();
-        FixedOutputReset::finalize_into_reset(&mut self.0, &mut full_output);
-        AsMut::<[u8]>::as_mut(out).copy_from_slice(&full_output[..8]);
-        AsMut::<[u8]>::as_mut(out)[..8 - BYTES].fill(0);
+        <Self as FixedOutput>::finalize_into(self.clone(), out);
+        <Self as Reset>::reset(self);
     }
 }
 
