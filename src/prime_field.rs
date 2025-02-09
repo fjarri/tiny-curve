@@ -6,7 +6,7 @@ use core::{
 
 use num_traits::{ConstZero, FromBytes, ToBytes};
 use primeorder::elliptic_curve::{
-    bigint::U64,
+    bigint::{Encoding, U192},
     ff::helpers::sqrt_ratio_generic,
     generic_array::{typenum, GenericArray},
     ops::{Invert, Reduce},
@@ -21,6 +21,18 @@ use crate::{
     primitives::{add, modular_inverse, mul, neg, sub},
     traits::{Modulus, PrimeFieldConstants, PrimitiveUint},
 };
+
+// The external representation of a field element.
+// `U64` would be enough, but it has to match `ReprSizeTypenum`
+// due to some internal checks in RustCrypto stack.
+pub(crate) type ReprUint = U192;
+
+// The size of the external representation of a field element.
+// `U8` would be enough, but `U24` is the lowest size for which
+// `sec1::ModulusSize` is implemented, which is needed for `elliptic_curve::FromEncodedPoint`.
+// TODO: U8 should work starting from `sec1=0.8`, which will probably be
+// a dependency of `primeorder=0.14`.
+pub(crate) type ReprSizeTypenum = typenum::U24;
 
 #[derive(Default, Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -78,7 +90,7 @@ impl<T, const M: u64> DefaultIsZeroes for FieldElement<T, M> where T: PrimitiveU
 
 impl<C, T, const M: u64> From<ScalarPrimitive<C>> for FieldElement<T, M>
 where
-    C: Curve<Uint = U64>,
+    C: Curve<Uint = ReprUint>,
     T: PrimitiveUint,
 {
     fn from(source: ScalarPrimitive<C>) -> Self {
@@ -90,10 +102,16 @@ impl<T, const M: u64> FromUintUnchecked for FieldElement<T, M>
 where
     T: PrimitiveUint,
 {
-    type Uint = U64;
+    type Uint = ReprUint;
 
     fn from_uint_unchecked(uint: Self::Uint) -> Self {
-        Self::new_unchecked_u64(uint.into())
+        debug_assert!(uint.bits_vartime() <= u64::BITS as usize);
+        const DATA_SIZE: usize = u64::BITS as usize / 8;
+        let bytes = uint.to_be_bytes();
+        let value_bytes: [u8; DATA_SIZE] = bytes[bytes.len() - DATA_SIZE..]
+            .try_into()
+            .expect("slice has the correct length");
+        Self::new_unchecked_u64(u64::from_be_bytes(value_bytes))
     }
 }
 
@@ -120,14 +138,15 @@ where
     }
 }
 
-impl<T, const M: u64> From<FieldElement<T, M>> for GenericArray<u8, typenum::U8>
+impl<T, const M: u64> From<FieldElement<T, M>> for GenericArray<u8, typenum::U24>
 where
     T: PrimitiveUint,
 {
     fn from(source: FieldElement<T, M>) -> Self {
         let mut bytes = Self::default();
+        let bytes_len = bytes.len();
         let source_bytes = source.to_u64().to_be_bytes();
-        bytes.copy_from_slice(source_bytes.as_ref());
+        bytes[bytes_len - source_bytes.len()..].copy_from_slice(source_bytes.as_ref());
         bytes
     }
 }
@@ -142,12 +161,12 @@ where
     }
 }
 
-impl<T, const M: u64> From<FieldElement<T, M>> for U64
+impl<T, const M: u64> From<FieldElement<T, M>> for ReprUint
 where
     T: PrimitiveUint,
 {
     fn from(source: FieldElement<T, M>) -> Self {
-        U64::from(source.to_u64())
+        ReprUint::from(source.to_u64())
     }
 }
 
@@ -175,18 +194,23 @@ where
     }
 }
 
-impl<T, const M: u64> Reduce<U64> for FieldElement<T, M>
+impl<T, const M: u64> Reduce<ReprUint> for FieldElement<T, M>
 where
     T: PrimitiveUint,
 {
-    type Bytes = GenericArray<u8, typenum::U8>;
+    type Bytes = GenericArray<u8, ReprSizeTypenum>;
 
-    fn reduce(n: U64) -> Self {
-        Self::from(u64::from(n) % M)
+    fn reduce(n: ReprUint) -> Self {
+        const DATA_SIZE: usize = u64::BITS as usize / 8;
+        let bytes = n.to_be_bytes();
+        let value_bytes: [u8; DATA_SIZE] = bytes[bytes.len() - DATA_SIZE..]
+            .try_into()
+            .expect("slice has the correct length");
+        Self::from(u64::from_be_bytes(value_bytes) % M)
     }
 
     fn reduce_bytes(bytes: &Self::Bytes) -> Self {
-        let uint = U64::from_be_slice(bytes);
+        let uint = ReprUint::from_be_slice(bytes);
         Self::reduce(uint)
     }
 }
@@ -448,13 +472,25 @@ where
     const DELTA: Self = FieldElement::new_unchecked(Modulus::<T, M>::DELTA);
 
     fn from_repr(repr: Self::Repr) -> CtOption<Self> {
-        let value = u64::from_be_bytes(repr.into());
-        let within_range = Choice::from((value < M) as u8);
+        const DATA_SIZE: usize = u64::BITS as usize / 8;
+        let repr_len = repr.as_ref().len();
+        let data: [u8; DATA_SIZE] = repr.as_ref()[repr_len - DATA_SIZE..]
+            .try_into()
+            .expect("slice has the correct length");
+        let value = u64::from_be_bytes(data);
+        let high_bits_are_zero = repr.as_ref()[..repr_len - DATA_SIZE]
+            .iter()
+            .all(|x| x == &0);
+        let within_range = Choice::from((high_bits_are_zero && value < M) as u8);
         CtOption::new(Self::new_unchecked_u64(value), within_range)
     }
 
     fn to_repr(&self) -> Self::Repr {
-        self.to_u64().to_be_bytes().into()
+        const DATA_SIZE: usize = u64::BITS as usize / 8;
+        let mut repr = Self::Repr::default();
+        let repr_len = repr.as_ref().len();
+        repr.as_mut()[repr_len - DATA_SIZE..].copy_from_slice(&self.to_u64().to_be_bytes());
+        repr
     }
 
     fn is_odd(&self) -> Choice {

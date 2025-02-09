@@ -8,15 +8,7 @@ use primeorder::elliptic_curve::subtle::{ConditionallySelectable, ConstantTimeEq
 use crate::reciprocal::{rem_wide_with_reciprocal, Reciprocal};
 
 pub trait PrimeFieldConstants<T> {
-    type Repr: AsRef<[u8]>
-        + AsMut<[u8]>
-        + Send
-        + Sync
-        + Default
-        + Clone
-        + Copy
-        + From<[u8; 8]>
-        + Into<[u8; 8]>;
+    type Repr: AsRef<[u8]> + AsMut<[u8]> + Send + Sync + Default + Clone + Copy;
     const MODULUS_STR: &'static str;
     const MODULUS: T;
     const NUM_BITS: u32;
