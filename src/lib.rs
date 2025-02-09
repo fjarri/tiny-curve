@@ -16,7 +16,9 @@
 //! ## `serde` support
 //!
 //! When the `serde` feature of this crate is enabled, `Serialize` and
-//! `Deserialize` are impl'd for [`FieldElement`].
+//! `Deserialize` are impl'd for the associated
+//! [`CurveArithmetic::Scalar`](primeorder::elliptic_curve::CurveArithmetic::Scalar)
+//! types of the curves.
 
 mod curve16;
 mod curve32;
