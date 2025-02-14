@@ -35,7 +35,6 @@ pub(crate) type ReprUint = U192;
 pub(crate) type ReprSizeTypenum = typenum::U24;
 
 #[derive(Default, Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FieldElement<T: PrimitiveUint, const M: u64>(T);
 
 impl<T, const M: u64> FieldElement<T, M>
