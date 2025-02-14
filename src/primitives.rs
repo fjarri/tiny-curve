@@ -69,6 +69,10 @@ where
         return None;
     }
 
+    if arg == &T::ZERO {
+        return None;
+    }
+
     let mut a = *arg;
     let mut b = modulus;
 
@@ -122,6 +126,12 @@ where
 mod tests {
     use super::modular_inverse;
     use proptest::prelude::*;
+
+    #[test]
+    fn inverse_of_zero() {
+        const M: u64 = 0xfffffffffffffe95u64;
+        assert!(modular_inverse::<u64, M>(&0).is_none());
+    }
 
     proptest! {
         #[test]

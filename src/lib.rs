@@ -13,23 +13,36 @@
 )]
 #![cfg_attr(not(test), warn(clippy::unwrap_used))]
 
-//! ## `serde` support
-//!
-//! When the `serde` feature of this crate is enabled, `Serialize` and
-//! `Deserialize` are impl'd for the associated
-//! [`CurveArithmetic::Scalar`](primeorder::elliptic_curve::CurveArithmetic::Scalar)
-//! types of the curves.
+/*!
+## Features
+
+`serde`: `serde` support for [`elliptic_curve::PublicKey`]
+parametrized by the curves from this crate.
+
+`ecdsa`: [`ecdsa`] support for [`ecdsa::SigningKey`] and [`ecdsa::VerifyingKey`]
+parametrized by the curves from this crate.
+
+`pkcs8`: [`elliptic_curve::pkcs8`] support for [`elliptic_curve::SecretKey`]
+and [`elliptic_curve::PublicKey`] parametrized by the curves from this crate.
+
+`bip32`: [`bip32`](`::bip32`) support via newtypes [`PrivateKeyBip32`] and [`PublicKeyBip32`].
+*/
 
 mod curve16;
 mod curve32;
 mod curve64;
-mod ecdsa;
 mod hash;
 mod prime_field;
 mod primitives;
 mod reciprocal;
 mod traits;
 
+#[cfg(feature = "bip32")]
+mod bip32;
+
 pub use curve16::TinyCurve16;
 pub use curve32::TinyCurve32;
 pub use curve64::TinyCurve64;
+
+#[cfg(feature = "bip32")]
+pub use bip32::{PrivateKeyBip32, PublicKeyBip32};

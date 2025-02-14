@@ -17,6 +17,15 @@ use primeorder::elliptic_curve::{
     Curve, Field, PrimeField, ScalarPrimitive,
 };
 
+#[cfg(feature = "ecdsa")]
+use ::{
+    ecdsa::{hazmat::SignPrimitive, SignatureSize},
+    primeorder::{
+        elliptic_curve::{generic_array::ArrayLength, CurveArithmetic},
+        FieldBytes, PrimeCurve,
+    },
+};
+
 use crate::{
     primitives::{add, modular_inverse, mul, neg, sub},
     traits::{Modulus, PrimeFieldConstants, PrimitiveUint},
@@ -35,7 +44,6 @@ pub(crate) type ReprUint = U192;
 pub(crate) type ReprSizeTypenum = typenum::U24;
 
 #[derive(Default, Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FieldElement<T: PrimitiveUint, const M: u64>(T);
 
 impl<T, const M: u64> FieldElement<T, M>
@@ -505,4 +513,17 @@ where
     fn as_ref(&self) -> &FieldElement<T, M> {
         self
     }
+}
+
+#[cfg(feature = "ecdsa")]
+impl<C, T, const M: u64> SignPrimitive<C> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+    C: PrimeCurve + CurveArithmetic<Scalar = Self>,
+    SignatureSize<C>: ArrayLength<u8>,
+    Self: Reduce<C::Uint, Bytes = FieldBytes<C>>
+        + PrimeField<Repr = FieldBytes<C>>
+        + Into<FieldBytes<C>>,
+{
 }
