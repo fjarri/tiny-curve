@@ -76,15 +76,24 @@ impl PrimeCurveParams for TinyCurve32 {
 mod tests {
     use primeorder::elliptic_curve::{
         ops::{MulByGenerator, Reduce},
-        CurveArithmetic, ProjectivePoint,
+        CurveArithmetic, Field, ProjectivePoint,
     };
     use proptest::prelude::*;
+    use rand_core::OsRng;
 
     use super::TinyCurve32;
     use crate::prime_field::ReprUint;
 
     type Scalar = <TinyCurve32 as CurveArithmetic>::Scalar;
     type Point = ProjectivePoint<TinyCurve32>;
+
+    #[test]
+    fn identity() {
+        let x = Scalar::random(&mut OsRng);
+        let y = Scalar::ZERO - x;
+        let p = Point::mul_by_generator(&x) + Point::mul_by_generator(&y);
+        assert_eq!(p, Point::IDENTITY);
+    }
 
     prop_compose! {
         /// Generate a random odd modulus.
