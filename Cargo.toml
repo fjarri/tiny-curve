@@ -16,6 +16,7 @@ num-traits = { version = "0.2", default-features = false }
 sha2 = { version = "0.10", default-features = false }
 
 ecdsa = { version = "0.16", default-features = false, optional = true }
+bip32 = { version = "0.5", default-features = false, optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
@@ -27,6 +28,7 @@ proptest = "1"
 serde = ["primeorder/serde"]
 ecdsa = ["ecdsa/signing", "ecdsa/verifying"]
 pkcs8 = ["elliptic-curve/pkcs8"]
+bip32 = ["dep:bip32", "elliptic-curve/sec1"]
 
 [[bench]]
 bench = true
