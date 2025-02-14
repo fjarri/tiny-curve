@@ -14,7 +14,7 @@
 [docs-image]: https://docs.rs/tiny-curve/badge.svg
 [docs-link]: https://docs.rs/tiny-curve/
 [license-image]: https://img.shields.io/crates/l/tiny-curve
-[build-image]: https://github.com/fjarri/tiny-curve/workflows/ci/badge.svg?branch=master&event=push
-[build-link]: https://github.com/fjarri/tiny-curve/actions?query=workflow%3Aci
+[build-image]: https://github.com/fjarri/tiny-curve/actions/workflows/ci.yml/badge.svg
+[build-link]: https://github.com/fjarri/tiny-curve/actions/workflows/ci.yml
 [coverage-image]: https://codecov.io/gh/fjarri/tiny-curve/branch/master/graph/badge.svg
 [coverage-link]: https://codecov.io/gh/fjarri/tiny-curve
