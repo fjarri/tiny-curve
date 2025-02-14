@@ -4,10 +4,16 @@ use primeorder::{
     AffinePoint, PrimeCurve, PrimeCurveParams, ProjectivePoint,
 };
 
+#[cfg(feature = "ecdsa")]
+use ::ecdsa::hazmat::{DigestPrimitive, VerifyPrimitive};
+
 use crate::{
     prime_field::{FieldElement, ReprSizeTypenum, ReprUint},
     traits::{Modulus, PrimeFieldConstants},
 };
+
+#[cfg(feature = "ecdsa")]
+use crate::hash::TinyHash;
 
 const ORDER: u64 = 0xffffffff1a0a85df;
 const FIELD_MODULUS: u64 = 0xfffffffffffffc7f;
@@ -70,6 +76,14 @@ impl PrimeCurveParams for TinyCurve64 {
         FieldElement::new_unchecked(11619086278950426528),
         FieldElement::new_unchecked(2765382488766937725),
     );
+}
+
+#[cfg(feature = "ecdsa")]
+impl VerifyPrimitive<TinyCurve64> for AffinePoint<TinyCurve64> {}
+
+#[cfg(feature = "ecdsa")]
+impl DigestPrimitive for TinyCurve64 {
+    type Digest = TinyHash<8>;
 }
 
 #[cfg(test)]
@@ -144,4 +158,22 @@ mod tests_field_element {
     // t = (modulus - 1) >> S
     const T: [u64; 1] = [(F::MODULUS - 1) >> F::S];
     primeorder::impl_primefield_tests!(F, T);
+}
+
+#[cfg(all(test, feature = "ecdsa"))]
+mod tests_ecdsa {
+    use ecdsa::{SigningKey, VerifyingKey};
+    use rand_core::OsRng;
+
+    use super::TinyCurve64;
+
+    #[test]
+    fn sign_and_verify() {
+        let prehash = b"123456781234567812345678";
+        let sk = SigningKey::<TinyCurve64>::random(&mut OsRng);
+
+        let (signature, recovery_id) = sk.sign_prehash_recoverable(prehash).unwrap();
+        let vk = VerifyingKey::recover_from_prehash(prehash, &signature, recovery_id).unwrap();
+        assert_eq!(sk.verifying_key(), &vk);
+    }
 }

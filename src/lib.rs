@@ -18,12 +18,14 @@
 
 `serde`: `serde` support for [`primeorder::elliptic_curve::PublicKey`]
 parametrized by the curves from this crate.
+
+`ecdsa`: [`ecdsa`] support for [`ecdsa::SigningKey`] and [`ecdsa::VerifyingKey`]
+parametrized by the curves from this crate.
 */
 
 mod curve16;
 mod curve32;
 mod curve64;
-mod ecdsa;
 mod hash;
 mod prime_field;
 mod primitives;
