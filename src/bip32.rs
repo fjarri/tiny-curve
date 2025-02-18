@@ -1,9 +1,10 @@
 use bip32::{PrivateKeyBytes, PublicKeyBytes};
 use primeorder::elliptic_curve::{
-    generic_array::typenum::Unsigned,
-    ops::MulByGenerator,
+    bigint::ArrayEncoding,
+    generic_array::{typenum::Unsigned, GenericArray},
+    ops::{MulByGenerator, ReduceNonZero},
     sec1::{EncodedPoint, FromEncodedPoint, ModulusSize, ToEncodedPoint},
-    Curve, CurveArithmetic, FieldBytes, NonZeroScalar, PublicKey, SecretKey,
+    Curve, CurveArithmetic, NonZeroScalar, PublicKey, SecretKey,
 };
 
 use crate::prime_field::ReprSizeTypenum;
@@ -57,6 +58,7 @@ where
     C: Curve + CurveArithmetic,
     C::AffinePoint: ToEncodedPoint<C> + FromEncodedPoint<C>,
     C::FieldBytesSize: ModulusSize,
+    C::Scalar: ReduceNonZero<C::Uint>,
 {
     fn from_bytes(bytes: PublicKeyBytes) -> Result<Self, bip32::Error> {
         let bytes_len = bytes.len();
@@ -78,14 +80,13 @@ where
 
     fn derive_child(&self, other: PrivateKeyBytes) -> Result<Self, bip32::Error> {
         let bytes_len = other.len();
-        let repr = FieldBytes::<C>::from_exact_iter(
-            other[bytes_len - ReprSizeTypenum::to_usize()..]
+        let repr = GenericArray::<u8, <C::Uint as ArrayEncoding>::ByteSize>::from_exact_iter(
+            other[bytes_len - <C::Uint as ArrayEncoding>::ByteSize::to_usize()..]
                 .iter()
                 .copied(),
         )
-        .expect("`ReprSizeTypenum` corresponds to the length of `FieldBytes`");
-        let child_scalar = Option::<NonZeroScalar<C>>::from(NonZeroScalar::from_repr(repr))
-            .ok_or(bip32::Error::Crypto)?;
+        .expect("slice length is correct");
+        let child_scalar = NonZeroScalar::<C>::reduce_nonzero(C::Uint::from_be_byte_array(repr));
 
         let child_point =
             self.0.to_projective() + C::ProjectivePoint::mul_by_generator(&child_scalar);
@@ -100,6 +101,7 @@ where
     C: Curve + CurveArithmetic,
     C::AffinePoint: ToEncodedPoint<C> + FromEncodedPoint<C>,
     C::FieldBytesSize: ModulusSize,
+    C::Scalar: ReduceNonZero<C::Uint>,
 {
     type PublicKey = PublicKeyBip32<C>;
 
@@ -121,15 +123,13 @@ where
 
     fn derive_child(&self, other: PrivateKeyBytes) -> Result<Self, bip32::Error> {
         let bytes_len = other.len();
-        let repr = FieldBytes::<C>::from_exact_iter(
-            other[bytes_len - ReprSizeTypenum::to_usize()..]
+        let repr = GenericArray::<u8, <C::Uint as ArrayEncoding>::ByteSize>::from_exact_iter(
+            other[bytes_len - <C::Uint as ArrayEncoding>::ByteSize::to_usize()..]
                 .iter()
                 .copied(),
         )
-        .expect("`ReprSizeTypenum` corresponds to the length of `FieldBytes`");
-        let child_scalar = Option::<NonZeroScalar<C>>::from(NonZeroScalar::from_repr(repr))
-            .ok_or(bip32::Error::Crypto)?;
-
+        .expect("slice length is correct");
+        let child_scalar = NonZeroScalar::<C>::reduce_nonzero(C::Uint::from_be_byte_array(repr));
         let derived_scalar = *self.0.to_nonzero_scalar().as_ref() + *child_scalar.as_ref();
 
         Option::<NonZeroScalar<C>>::from(NonZeroScalar::new(derived_scalar))
@@ -145,7 +145,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bip32::{PrivateKey as _, PublicKey as _};
+    use bip32::{ChildNumber, PrivateKey as _, PublicKey as _};
     use primeorder::elliptic_curve::SecretKey;
     use rand_core::OsRng;
 
@@ -179,12 +179,16 @@ mod tests {
         let sk = SecretKey::<TinyCurve64>::random(&mut OsRng);
         let pk = sk.public_key();
 
-        let sk_child = SecretKey::<TinyCurve64>::random(&mut OsRng);
+        let child_number = ChildNumber(123);
+        let chain_code = [1u8; 32];
 
-        let child_bytes = PrivateKeyBip32::from(sk_child).to_bytes();
+        let sk = PrivateKeyBip32::from(sk);
+        let pk = PublicKeyBip32::from(pk);
 
-        let derived_from_sk = PrivateKeyBip32::from(sk).derive_child(child_bytes).unwrap();
-        let derived_from_pk = PublicKeyBip32::from(pk).derive_child(child_bytes).unwrap();
+        let (tweak, _new_chain_code) = pk.derive_tweak(&chain_code, child_number).unwrap();
+
+        let derived_from_sk = sk.derive_child(tweak).unwrap();
+        let derived_from_pk = pk.derive_child(tweak).unwrap();
 
         assert_eq!(derived_from_sk.public_key(), derived_from_pk);
     }
