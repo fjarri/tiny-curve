@@ -6,10 +6,10 @@ use core::{
 
 use num_traits::{ConstZero, FromBytes, ToBytes};
 use primeorder::elliptic_curve::{
-    bigint::{Encoding, U192},
+    bigint::{Encoding, NonZero, U192},
     ff::helpers::sqrt_ratio_generic,
     generic_array::{typenum, GenericArray},
-    ops::{Invert, Reduce},
+    ops::{Invert, Reduce, ReduceNonZero},
     rand_core::RngCore,
     scalar::{FromUintUnchecked, IsHigh},
     subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
@@ -210,16 +210,46 @@ where
 
     fn reduce(n: ReprUint) -> Self {
         const DATA_SIZE: usize = u64::BITS as usize / 8;
-        let bytes = n.to_be_bytes();
+
+        // TODO: use `rem_vartime()` when the crypto stack switches to crypto-bigint 0.6
+        let reduced = n.rem(&NonZero::new(ReprUint::from(M)).expect("the modulus is non-zero"));
+
+        let bytes = reduced.to_be_bytes();
         let value_bytes: [u8; DATA_SIZE] = bytes[bytes.len() - DATA_SIZE..]
             .try_into()
             .expect("slice has the correct length");
-        Self::from(u64::from_be_bytes(value_bytes) % M)
+        Self::new_unchecked_u64(u64::from_be_bytes(value_bytes))
     }
 
     fn reduce_bytes(bytes: &Self::Bytes) -> Self {
         let uint = ReprUint::from_be_slice(bytes);
         Self::reduce(uint)
+    }
+}
+
+impl<T, const M: u64> ReduceNonZero<ReprUint> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn reduce_nonzero(n: ReprUint) -> Self {
+        const DATA_SIZE: usize = u64::BITS as usize / 8;
+
+        // TODO: use `rem_vartime()` when the crypto stack switches to crypto-bigint 0.6
+        let reduced = n.rem(
+            &NonZero::new(ReprUint::from(M - 1))
+                .expect("the modulus is non-zero and greater than 1"),
+        );
+
+        let bytes = reduced.to_be_bytes();
+        let value_bytes: [u8; DATA_SIZE] = bytes[bytes.len() - DATA_SIZE..]
+            .try_into()
+            .expect("slice has the correct length");
+        Self::new_unchecked_u64(u64::from_be_bytes(value_bytes) + 1)
+    }
+
+    fn reduce_nonzero_bytes(bytes: &Self::Bytes) -> Self {
+        let uint = ReprUint::from_be_slice(bytes);
+        Self::reduce_nonzero(uint)
     }
 }
 
