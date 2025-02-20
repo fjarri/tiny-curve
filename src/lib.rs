@@ -34,6 +34,7 @@ mod curve64;
 mod hash;
 mod prime_field;
 mod primitives;
+mod prime_field2;
 mod reciprocal;
 mod traits;
 
