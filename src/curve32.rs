@@ -102,9 +102,14 @@ impl AssociatedOid for TinyCurve32 {
 
 #[cfg(test)]
 mod tests {
-    use primeorder::elliptic_curve::{
-        ops::{MulByGenerator, Reduce},
-        CurveArithmetic, Field, ProjectivePoint,
+    use primeorder::{
+        elliptic_curve::{
+            bigint::Encoding,
+            generic_array::GenericArray,
+            ops::{MulByGenerator, Reduce},
+            CurveArithmetic, Field, FieldBytesSize, ProjectivePoint,
+        },
+        PrimeField,
     };
     use proptest::prelude::*;
     use rand_core::OsRng;
@@ -121,6 +126,28 @@ mod tests {
         let y = Scalar::ZERO - x;
         let p = Point::mul_by_generator(&x) + Point::mul_by_generator(&y);
         assert_eq!(p, Point::IDENTITY);
+    }
+
+    #[test]
+    fn to_and_from_repr() {
+        let mut repr = GenericArray::<u8, FieldBytesSize<TinyCurve32>>::default();
+
+        // `s` now contains the value `M - 1`.
+        let s = -Scalar::new_unchecked(1);
+        let s_uint: ReprUint = s.into();
+
+        // Check that to_repr/from_repr work normally
+        let s_uint_repr = s_uint.to_be_bytes();
+        repr.copy_from_slice(&s_uint_repr);
+        let s_repr = s.to_repr();
+        assert_eq!(repr, s_repr);
+        assert_eq!(Scalar::from_repr(repr).unwrap(), s);
+
+        // Now construct a representation of the value `M` (which would be out of range)
+        let x_uint = s_uint.wrapping_add(&ReprUint::ONE);
+        let x_uint_repr = x_uint.to_be_bytes();
+        repr.copy_from_slice(&x_uint_repr);
+        assert!(bool::from(Scalar::from_repr(repr).is_none()));
     }
 
     prop_compose! {

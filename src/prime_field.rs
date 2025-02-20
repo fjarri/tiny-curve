@@ -519,8 +519,17 @@ where
         let high_bits_are_zero = repr.as_ref()[..repr_len - DATA_SIZE]
             .iter()
             .all(|x| x == &0);
-        let within_range = Choice::from((high_bits_are_zero && value < M) as u8);
-        CtOption::new(Self::new_unchecked_u64(value), within_range)
+
+        let within_range = high_bits_are_zero && value < M;
+
+        // If the value is not within [0, M), avoid triggering debug checks in `new_unchecked_u64`,
+        // and make it more clear that the value is invalid.
+        let value = if within_range { value } else { 0 };
+
+        CtOption::new(
+            Self::new_unchecked_u64(value),
+            Choice::from(within_range as u8),
+        )
     }
 
     fn to_repr(&self) -> Self::Repr {
