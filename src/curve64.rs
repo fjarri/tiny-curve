@@ -262,4 +262,15 @@ mod tests_serde {
         let pk_back: PublicKey<TinyCurve64> = postcard::from_bytes(&bytes).unwrap();
         assert_eq!(pk, pk_back);
     }
+
+    #[cfg(feature = "ecdsa")]
+    #[test]
+    fn serialize_verifying_key() {
+        let sk = SecretKey::<TinyCurve64>::random(&mut OsRng);
+        let pk = sk.public_key();
+        let vk = ecdsa::VerifyingKey::from(&pk);
+        let bytes = postcard::to_allocvec(&vk).unwrap();
+        let vk_back: ecdsa::VerifyingKey<TinyCurve64> = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(vk, vk_back);
+    }
 }

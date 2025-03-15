@@ -27,7 +27,7 @@ postcard = { version = "1", features = ["alloc"] }
 serde = "1"
 
 [features]
-serde = ["primeorder/serde", "pkcs8"]
+serde = ["primeorder/serde", "pkcs8", "ecdsa?/serde", "ecdsa?/pem"]
 ecdsa = ["ecdsa/signing", "ecdsa/verifying"]
 pkcs8 = ["elliptic-curve/pkcs8"]
 bip32 = ["dep:bip32", "elliptic-curve/sec1"]
