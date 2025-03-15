@@ -7,7 +7,7 @@ description = "Small-order elliptic curves for testing"
 repository = "https://github.com/fjarri/tiny-curve"
 readme = "README.md"
 categories = ["cryptography", "no-std"]
-rust-version = "1.79"
+rust-version = "1.81"
 
 [dependencies]
 primeorder = { version = "0.13", default-features = false }
