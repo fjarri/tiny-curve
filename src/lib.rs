@@ -19,7 +19,7 @@
 `serde`: `serde` support for [`elliptic_curve::PublicKey`]
 parametrized by the curves from this crate.
 
-`ecdsa`: [`ecdsa`] support for [`ecdsa::SigningKey`] and [`ecdsa::VerifyingKey`]
+`ecdsa`: [`ecdsa`](`::ecdsa`) support for [`ecdsa::SigningKey`] and [`ecdsa::VerifyingKey`]
 parametrized by the curves from this crate.
 
 `pkcs8`: [`elliptic_curve::pkcs8`] support for [`elliptic_curve::SecretKey`]
