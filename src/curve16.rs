@@ -246,3 +246,20 @@ mod tests_pkcs8 {
         assert_eq!(pk, pk_back);
     }
 }
+
+#[cfg(all(test, feature = "serde"))]
+mod tests_serde {
+    use primeorder::elliptic_curve::{PublicKey, SecretKey};
+    use rand_core::OsRng;
+
+    use super::TinyCurve16;
+
+    #[test]
+    fn serialize_public_key() {
+        let sk = SecretKey::<TinyCurve16>::random(&mut OsRng);
+        let pk = sk.public_key();
+        let bytes = postcard::to_allocvec(&pk).unwrap();
+        let pk_back: PublicKey<TinyCurve16> = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(pk, pk_back);
+    }
+}

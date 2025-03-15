@@ -23,9 +23,11 @@ criterion = "0.5"
 rand_core = { version = "0.6", features = ["getrandom"] }
 k256 = "0.13"
 proptest = "1"
+postcard = { version = "1", features = ["alloc"] }
+serde = "1"
 
 [features]
-serde = ["primeorder/serde"]
+serde = ["primeorder/serde", "pkcs8"]
 ecdsa = ["ecdsa/signing", "ecdsa/verifying"]
 pkcs8 = ["elliptic-curve/pkcs8"]
 bip32 = ["dep:bip32", "elliptic-curve/sec1"]
