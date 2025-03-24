@@ -100,7 +100,7 @@ impl Reciprocal {
 /// Calculate the quotient and the remainder of the division of a wide word
 /// (supplied as high and low words) by `d`, with a precalculated reciprocal `v`.
 #[inline(always)]
-pub(crate) fn div2by1(u1: u64, u0: u64, reciprocal: &Reciprocal) -> (u64, u64) {
+pub(crate) const fn div2by1(u1: u64, u0: u64, reciprocal: &Reciprocal) -> (u64, u64) {
     let d = reciprocal.divisor_normalized;
     let rec = reciprocal.reciprocal;
 
@@ -127,7 +127,7 @@ pub(crate) fn div2by1(u1: u64, u0: u64, reciprocal: &Reciprocal) -> (u64, u64) {
 }
 
 #[inline(always)]
-fn rem_with_reciprocal(hi: u64, lo: u64, reciprocal: &Reciprocal) -> u64 {
+const fn rem_with_reciprocal(hi: u64, lo: u64, reciprocal: &Reciprocal) -> u64 {
     let mut hi = hi << reciprocal.shift;
     if reciprocal.shift > 0 {
         hi |= lo >> (u64::BITS - reciprocal.shift);
@@ -142,7 +142,7 @@ fn rem_with_reciprocal(hi: u64, lo: u64, reciprocal: &Reciprocal) -> u64 {
 // In our case this is always true since `x` is a product of two numbers modulo `m`,
 // and `m` is what we create the reciprocal for.
 #[inline(always)]
-pub fn rem_wide_with_reciprocal(x: u128, reciprocal: &Reciprocal) -> u64 {
+pub const fn rem_wide_with_reciprocal(x: u128, reciprocal: &Reciprocal) -> u64 {
     let hi = (x >> u64::BITS) as u64;
     let lo = x as u64;
     rem_with_reciprocal(hi, lo, reciprocal)
