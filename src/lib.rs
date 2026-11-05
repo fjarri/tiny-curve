@@ -31,7 +31,6 @@ and [`elliptic_curve::PublicKey`] parametrized by the curves from this crate.
 mod curve16;
 mod curve32;
 mod curve64;
-mod hash;
 mod prime_field;
 mod primitives;
 mod reciprocal;

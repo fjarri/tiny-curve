@@ -1,13 +1,11 @@
 use bip32::{PrivateKeyBytes, PublicKeyBytes};
 use primeorder::elliptic_curve::{
+    array::{typenum::Unsigned, Array},
     bigint::ArrayEncoding,
-    generic_array::{typenum::Unsigned, GenericArray},
-    ops::{MulByGenerator, ReduceNonZero},
-    sec1::{EncodedPoint, FromEncodedPoint, ModulusSize, ToEncodedPoint},
-    Curve, CurveArithmetic, NonZeroScalar, PublicKey, SecretKey,
+    ops::ReduceNonZero,
+    sec1::{FromSec1Point, ModulusSize, Sec1Point, ToSec1Point},
+    Curve, CurveArithmetic, Group, NonZeroScalar, PublicKey, SecretKey,
 };
-
-use crate::prime_field::ReprSizeTypenum;
 
 /// A newtype wrapper for [`elliptic_curve::SecretKey`] implementing [`bip32`] traits.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,37 +54,35 @@ impl<C: CurveArithmetic> From<PublicKeyBip32<C>> for PublicKey<C> {
 impl<C> bip32::PublicKey for PublicKeyBip32<C>
 where
     C: Curve + CurveArithmetic,
-    C::AffinePoint: ToEncodedPoint<C> + FromEncodedPoint<C>,
+    C::AffinePoint: ToSec1Point<C> + FromSec1Point<C>,
     C::FieldBytesSize: ModulusSize,
     C::Scalar: ReduceNonZero<C::Uint>,
 {
     fn from_bytes(bytes: PublicKeyBytes) -> Result<Self, bip32::Error> {
         let bytes_len = bytes.len();
         let ep =
-            EncodedPoint::<C>::from_bytes(&bytes[bytes_len - ReprSizeTypenum::to_usize() - 1..])
+            Sec1Point::<C>::from_bytes(&bytes[bytes_len - C::FieldBytesSize::to_usize() - 1..])
                 .map_err(|_| bip32::Error::Decode)?;
         Ok(Self(
-            Option::from(PublicKey::from_encoded_point(&ep)).ok_or(bip32::Error::Crypto)?,
+            Option::from(PublicKey::from_sec1_point(&ep)).ok_or(bip32::Error::Crypto)?,
         ))
     }
 
     fn to_bytes(&self) -> PublicKeyBytes {
         let mut bytes = [0u8; 33];
         let bytes_len = bytes.len();
-        let ep = self.0.to_encoded_point(true);
-        bytes[bytes_len - ReprSizeTypenum::to_usize() - 1..].copy_from_slice(ep.as_bytes());
+        let ep = self.0.to_sec1_point(true);
+        bytes[bytes_len - C::FieldBytesSize::to_usize() - 1..].copy_from_slice(ep.as_bytes());
         bytes
     }
 
     fn derive_child(&self, other: PrivateKeyBytes) -> Result<Self, bip32::Error> {
         let bytes_len = other.len();
-        let repr = GenericArray::<u8, <C::Uint as ArrayEncoding>::ByteSize>::from_exact_iter(
-            other[bytes_len - <C::Uint as ArrayEncoding>::ByteSize::to_usize()..]
-                .iter()
-                .copied(),
+        let repr = Array::<u8, <C::Uint as ArrayEncoding>::ByteSize>::try_from(
+            &other[bytes_len - <C::Uint as ArrayEncoding>::ByteSize::to_usize()..],
         )
         .expect("slice length is correct");
-        let child_scalar = NonZeroScalar::<C>::reduce_nonzero(C::Uint::from_be_byte_array(repr));
+        let child_scalar = NonZeroScalar::<C>::reduce_nonzero(&C::Uint::from_be_byte_array(repr));
 
         let child_point =
             self.0.to_projective() + C::ProjectivePoint::mul_by_generator(&child_scalar);
@@ -99,7 +95,7 @@ where
 impl<C> bip32::PrivateKey for PrivateKeyBip32<C>
 where
     C: Curve + CurveArithmetic,
-    C::AffinePoint: ToEncodedPoint<C> + FromEncodedPoint<C>,
+    C::AffinePoint: ToSec1Point<C> + FromSec1Point<C>,
     C::FieldBytesSize: ModulusSize,
     C::Scalar: ReduceNonZero<C::Uint>,
 {
@@ -108,7 +104,7 @@ where
     fn from_bytes(bytes: &PrivateKeyBytes) -> Result<Self, bip32::Error> {
         let bytes_len = bytes.len();
         Ok(Self(
-            SecretKey::from_slice(&bytes[bytes_len - ReprSizeTypenum::to_usize()..])
+            SecretKey::from_slice(&bytes[bytes_len - C::FieldBytesSize::to_usize()..])
                 .map_err(|_| bip32::Error::Crypto)?,
         ))
     }
@@ -123,13 +119,11 @@ where
 
     fn derive_child(&self, other: PrivateKeyBytes) -> Result<Self, bip32::Error> {
         let bytes_len = other.len();
-        let repr = GenericArray::<u8, <C::Uint as ArrayEncoding>::ByteSize>::from_exact_iter(
-            other[bytes_len - <C::Uint as ArrayEncoding>::ByteSize::to_usize()..]
-                .iter()
-                .copied(),
+        let repr = Array::<u8, <C::Uint as ArrayEncoding>::ByteSize>::try_from(
+            &other[bytes_len - <C::Uint as ArrayEncoding>::ByteSize::to_usize()..],
         )
         .expect("slice length is correct");
-        let child_scalar = NonZeroScalar::<C>::reduce_nonzero(C::Uint::from_be_byte_array(repr));
+        let child_scalar = NonZeroScalar::<C>::reduce_nonzero(&C::Uint::from_be_byte_array(repr));
         let derived_scalar = *self.0.to_nonzero_scalar().as_ref() + *child_scalar.as_ref();
 
         Option::<NonZeroScalar<C>>::from(NonZeroScalar::new(derived_scalar))
@@ -146,8 +140,10 @@ where
 #[cfg(test)]
 mod tests {
     use bip32::{ChildNumber, PrivateKey as _, PublicKey as _};
+    use primeorder::elliptic_curve::Generate;
     use primeorder::elliptic_curve::SecretKey;
-    use rand_core::OsRng;
+    use rand::rngs::SysRng;
+    use rand_core::UnwrapErr;
 
     use crate::curve64::TinyCurve64;
 
@@ -155,7 +151,7 @@ mod tests {
 
     #[test]
     fn public_key_roundtrip() {
-        let sk = SecretKey::<TinyCurve64>::random(&mut OsRng);
+        let sk = SecretKey::<TinyCurve64>::generate_from_rng(&mut UnwrapErr(SysRng));
         let pk = sk.public_key();
 
         let pk_bip32 = PublicKeyBip32::from(pk);
@@ -166,7 +162,7 @@ mod tests {
 
     #[test]
     fn private_key_roundtrip() {
-        let sk = SecretKey::<TinyCurve64>::random(&mut OsRng);
+        let sk = SecretKey::<TinyCurve64>::generate_from_rng(&mut UnwrapErr(SysRng));
 
         let sk_bip32 = PrivateKeyBip32::from(sk);
         let bytes = sk_bip32.to_bytes();
@@ -176,7 +172,7 @@ mod tests {
 
     #[test]
     fn derivation() {
-        let sk = SecretKey::<TinyCurve64>::random(&mut OsRng);
+        let sk = SecretKey::<TinyCurve64>::generate_from_rng(&mut UnwrapErr(SysRng));
         let pk = sk.public_key();
 
         let child_number = ChildNumber(123);

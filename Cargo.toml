@@ -10,25 +10,27 @@ categories = ["cryptography", "no-std"]
 rust-version = "1.81"
 
 [dependencies]
-primeorder = { version = "0.13", default-features = false }
-elliptic-curve = { version = "0.13", default-features = false } # version-matched with `primeorder`
+primeorder = { version = "0.14", default-features = false }
+elliptic-curve = { version = "0.14", default-features = false } # version-matched with `primeorder`
 num-traits = { version = "0.2", default-features = false }
-sha2 = { version = "0.10", default-features = false }
+sha2 = { version = "0.11", default-features = false }
 
-ecdsa = { version = "0.16", default-features = false, optional = true }
-bip32 = { version = "0.5", default-features = false, optional = true }
+ecdsa = { version = "0.17", default-features = false, optional = true }
+bip32 = { version = "0.6", default-features = false, optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
-rand_core = { version = "0.6", features = ["getrandom"] }
-k256 = "0.13"
+rand_core = "0.10"
+rand = { version = "0.10", features = ["sys_rng"] }
+k256 = "0.14"
+primefield = "0.14"
 proptest = "1"
 postcard = { version = "1", features = ["alloc"] }
 serde = "1"
 
 [features]
 serde = ["primeorder/serde", "pkcs8", "ecdsa?/serde", "ecdsa?/pem"]
-ecdsa = ["ecdsa/signing", "ecdsa/verifying"]
+ecdsa = ["ecdsa/algorithm"]
 pkcs8 = ["elliptic-curve/pkcs8"]
 bip32 = ["dep:bip32", "elliptic-curve/sec1"]
 
