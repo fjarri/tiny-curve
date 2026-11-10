@@ -115,4 +115,5 @@ jobs:
           toolchain: nightly
           override: true
           profile: minimal
-      - run: env RUSTDOCFLAGS='--cfg docsrs -D warnings' cargo doc --all-features
+      # No dependencies since some of them still use the deprecated `doc_auto_cfg` feature flag.
+      - run: env RUSTDOCFLAGS='--cfg docsrs -D warnings' cargo doc --all-features --no-deps
