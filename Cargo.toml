@@ -1,13 +1,13 @@
 [package]
 name = "tiny-curve"
 version = "0.2.2"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 description = "Small-order elliptic curves for testing"
 repository = "https://github.com/fjarri/tiny-curve"
 readme = "README.md"
 categories = ["cryptography", "no-std"]
-rust-version = "1.81"
+rust-version = "1.85"
 
 [dependencies]
 primeorder = { version = "0.14", default-features = false }
