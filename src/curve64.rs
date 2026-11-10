@@ -28,7 +28,7 @@ const FIELD_MODULUS: u64 = 0xfffffffffffffc7f;
 
 impl PrimeFieldConstants<u64> for Modulus<u64, FIELD_MODULUS> {
     type ReprSize = FieldBytesSize<TinyCurve64>;
-    const MODULUS_STR: &'static str = "0xfffffffffffffc7f";
+    const MODULUS_STR: &'static str = "fffffffffffffc7f";
     const MODULUS: u64 = FIELD_MODULUS;
     const NUM_BITS: u32 = 64;
     const CAPACITY: u32 = 63;
@@ -43,7 +43,7 @@ impl PrimeFieldConstants<u64> for Modulus<u64, FIELD_MODULUS> {
 
 impl PrimeFieldConstants<u64> for Modulus<u64, ORDER> {
     type ReprSize = FieldBytesSize<TinyCurve64>;
-    const MODULUS_STR: &'static str = "0xffffffff1a0a85df";
+    const MODULUS_STR: &'static str = "ffffffff1a0a85df";
     const MODULUS: u64 = ORDER;
     const NUM_BITS: u32 = 64;
     const CAPACITY: u32 = 63;
@@ -192,16 +192,11 @@ mod tests_scalar {
     use primeorder::{Field, elliptic_curve::CurveArithmetic};
 
     use super::TinyCurve64;
+    use crate::prime_field::ReprUint;
 
     type F = <TinyCurve64 as CurveArithmetic>::Scalar;
 
-    primefield::test_field_identity!(F);
-    primefield::test_field_invert!(F);
-    primefield::test_field_sqrt!(F);
-
-    // TODO: `primeorder::impl_primefield_tests!` was replaced by `primefield::test_primefield_constants!`,
-    // which parses `PrimeField::MODULUS` as a full-width big-endian hex string without the `0x` prefix
-    // and requires `Retrieve` output to support `jacobi_symbol()`. Needs a custom port.
+    primefield::test_primefield!(F, ReprUint);
 }
 
 #[cfg(test)]
@@ -209,16 +204,11 @@ mod tests_field_element {
     use primeorder::{Field, FieldArithmetic};
 
     use super::TinyCurve64;
+    use crate::prime_field::ReprUint;
 
     type F = <TinyCurve64 as FieldArithmetic>::FieldElement;
 
-    primefield::test_field_identity!(F);
-    primefield::test_field_invert!(F);
-    primefield::test_field_sqrt!(F);
-
-    // TODO: `primeorder::impl_primefield_tests!` was replaced by `primefield::test_primefield_constants!`,
-    // which parses `PrimeField::MODULUS` as a full-width big-endian hex string without the `0x` prefix
-    // and requires `Retrieve` output to support `jacobi_symbol()`. Needs a custom port.
+    primefield::test_primefield!(F, ReprUint);
 }
 
 #[cfg(all(test, feature = "ecdsa"))]
