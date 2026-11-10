@@ -1,10 +1,10 @@
 use bip32::{PrivateKeyBytes, PublicKeyBytes};
 use primeorder::elliptic_curve::{
-    array::{typenum::Unsigned, Array},
+    Curve, CurveArithmetic, Group, NonZeroScalar, PublicKey, SecretKey,
+    array::{Array, typenum::Unsigned},
     bigint::ArrayEncoding,
     ops::ReduceNonZero,
     sec1::{FromSec1Point, ModulusSize, Sec1Point, ToSec1Point},
-    Curve, CurveArithmetic, Group, NonZeroScalar, PublicKey, SecretKey,
 };
 
 /// A newtype wrapper for [`elliptic_curve::SecretKey`] implementing [`bip32`] traits.

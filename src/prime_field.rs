@@ -6,11 +6,13 @@ use core::{
 
 use num_traits::{ConstZero, FromBytes, ToBytes};
 use primeorder::{
+    ByteOrder, FieldExt, PrimeFieldExt, WnafSize,
     elliptic_curve::{
+        Field, Generate, PrimeField,
         array::Array,
         bigint::{
-            ctutils::{self, CtAssign, CtEq, CtSelectUsingCtAssign},
             U64,
+            ctutils::{self, CtAssign, CtEq, CtSelectUsingCtAssign},
         },
         ff::helpers::sqrt_ratio_generic,
         ops::{BatchInvert, Invert, MulVartime, Reduce, ReduceNonZero, Retrieve},
@@ -18,9 +20,7 @@ use primeorder::{
         scalar::{FromUintUnchecked, IsHigh},
         subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
         zeroize::DefaultIsZeroes,
-        Field, Generate, PrimeField,
     },
-    ByteOrder, FieldExt, PrimeFieldExt, WnafSize,
 };
 
 use crate::{

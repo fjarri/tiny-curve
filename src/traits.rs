@@ -8,7 +8,7 @@ use primeorder::elliptic_curve::{
     subtle::{ConditionallySelectable, ConstantTimeEq},
 };
 
-use crate::reciprocal::{rem_wide_with_reciprocal, Reciprocal};
+use crate::reciprocal::{Reciprocal, rem_wide_with_reciprocal};
 
 pub trait PrimeFieldConstants<T> {
     /// Size of the big-endian byte representation (`PrimeField::Repr`) of a field element.

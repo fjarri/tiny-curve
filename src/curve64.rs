@@ -1,12 +1,12 @@
 use primeorder::{
+    AffinePoint, FieldArithmetic, PrimeCurve, PrimeCurveParams, ProjectivePoint,
     array::typenum,
     elliptic_curve::{
-        bigint::Odd, point::PointCompression, scalar::FromUintUnchecked, Curve, CurveArithmetic,
-        FieldBytesSize,
+        Curve, CurveArithmetic, FieldBytesSize, bigint::Odd, point::PointCompression,
+        scalar::FromUintUnchecked,
     },
     mul_backend::VariableOnly,
     point_arithmetic::EquationAIsMinusThree,
-    AffinePoint, FieldArithmetic, PrimeCurve, PrimeCurveParams, ProjectivePoint,
 };
 
 #[cfg(feature = "ecdsa")]
@@ -119,11 +119,11 @@ impl AssociatedOid for TinyCurve64 {
 mod tests {
     use primeorder::array::typenum::Unsigned;
     use primeorder::{
-        elliptic_curve::{
-            array::Array, ops::Reduce, CurveArithmetic, Field, FieldBytesSize, Group,
-            ProjectivePoint,
-        },
         PrimeField,
+        elliptic_curve::{
+            CurveArithmetic, Field, FieldBytesSize, Group, ProjectivePoint, array::Array,
+            ops::Reduce,
+        },
     };
     use proptest::prelude::*;
     use rand::rngs::SysRng;
@@ -189,7 +189,7 @@ mod tests {
 
 #[cfg(test)]
 mod tests_scalar {
-    use primeorder::{elliptic_curve::CurveArithmetic, Field};
+    use primeorder::{Field, elliptic_curve::CurveArithmetic};
 
     use super::TinyCurve64;
 
@@ -245,8 +245,8 @@ mod tests_ecdsa {
 mod tests_pkcs8 {
     use primeorder::elliptic_curve::Generate;
     use primeorder::elliptic_curve::{
-        pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey},
         PublicKey, SecretKey,
+        pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey},
     };
     use rand::rngs::SysRng;
     use rand_core::UnwrapErr;
