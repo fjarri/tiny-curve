@@ -81,7 +81,14 @@ where
     }
 
     fn from_uint_unchecked(uint: ReprUint) -> Self {
-        debug_assert!(uint.bits_vartime() <= u64::BITS);
+        // `bits_vartime()` is deprecated since `crypto_bigint` 0.7.11
+        // (in favor of `bit_width_vartime()`).
+        // Since `crypto_bigint` is not a direct dependency, we cannot bound its version,
+        // and instead ignore the deprecation warning.
+        #[allow(deprecated)]
+        let uint_bits = uint.bits_vartime();
+
+        debug_assert!(uint_bits <= u64::BITS);
         const DATA_SIZE: usize = u64::BITS as usize / 8;
         let bytes = uint.to_be_bytes();
         let value_bytes: [u8; DATA_SIZE] = bytes[bytes.len() - DATA_SIZE..]
