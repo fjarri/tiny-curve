@@ -3,12 +3,16 @@ use core::{fmt::Debug, marker::PhantomData, ops::ShrAssign};
 use num_traits::{
     ConstOne, ConstZero, FromBytes, FromPrimitive, ToBytes, Unsigned, WrappingAdd, WrappingSub,
 };
-use primeorder::elliptic_curve::subtle::{ConditionallySelectable, ConstantTimeEq};
+use primeorder::elliptic_curve::{
+    array::ArraySize,
+    subtle::{ConditionallySelectable, ConstantTimeEq},
+};
 
-use crate::reciprocal::{rem_wide_with_reciprocal, Reciprocal};
+use crate::reciprocal::{Reciprocal, rem_wide_with_reciprocal};
 
 pub trait PrimeFieldConstants<T> {
-    type Repr: AsRef<[u8]> + AsMut<[u8]> + Send + Sync + Default + Clone + Copy;
+    /// Size of the big-endian byte representation (`PrimeField::Repr`) of a field element.
+    type ReprSize: ArraySize<ArrayType<u8>: Copy>;
     const MODULUS_STR: &'static str;
     const MODULUS: T;
     const NUM_BITS: u32;
@@ -19,6 +23,10 @@ pub trait PrimeFieldConstants<T> {
     const ROOT_OF_UNITY: T;
     const ROOT_OF_UNITY_INV: T;
     const DELTA: T;
+    /// The type-level equivalent of `NUM_BITS + 1` (needed for `primeorder::WnafSize`).
+    // TODO: `NUM_BITS` and `WnafStorageSize` can be derived from one source constant,
+    // but that requires const traits (to convert a typenum into u32).
+    type WnafStorageSize: ArraySize;
 }
 
 pub struct Modulus<T, const M: u64>(PhantomData<T>);

@@ -150,7 +150,7 @@ pub fn rem_wide_with_reciprocal(x: u128, reciprocal: &Reciprocal) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{rem_wide_with_reciprocal, Reciprocal};
+    use super::{Reciprocal, rem_wide_with_reciprocal};
     use proptest::prelude::*;
 
     proptest! {

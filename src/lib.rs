@@ -1,5 +1,5 @@
 #![cfg_attr(not(test), no_std)]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(unsafe_code)]
 #![warn(
@@ -31,7 +31,6 @@ and [`elliptic_curve::PublicKey`] parametrized by the curves from this crate.
 mod curve16;
 mod curve32;
 mod curve64;
-mod hash;
 mod prime_field;
 mod primitives;
 mod reciprocal;

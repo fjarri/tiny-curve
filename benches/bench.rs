@@ -1,8 +1,9 @@
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use ecdsa::SigningKey;
 use k256::Secp256k1;
-use primeorder::elliptic_curve::{ops::MulByGenerator, CurveArithmetic, Field, ProjectivePoint};
-use rand_core::OsRng;
+use primeorder::elliptic_curve::{CurveArithmetic, Field, Generate, Group, ProjectivePoint};
+use rand::rngs::SysRng;
+use rand_core::UnwrapErr;
 use tiny_curve::{TinyCurve16, TinyCurve32, TinyCurve64};
 
 fn bench_arithmetic(c: &mut Criterion) {
@@ -10,7 +11,7 @@ fn bench_arithmetic(c: &mut Criterion) {
 
     group.bench_function("Curve16, mul_by_generator", |b| {
         b.iter_batched(
-            || <TinyCurve16 as CurveArithmetic>::Scalar::random(&mut OsRng),
+            || <TinyCurve16 as CurveArithmetic>::Scalar::random(&mut UnwrapErr(SysRng)),
             |scalar| ProjectivePoint::<TinyCurve16>::mul_by_generator(&scalar),
             BatchSize::SmallInput,
         )
@@ -18,7 +19,7 @@ fn bench_arithmetic(c: &mut Criterion) {
 
     group.bench_function("Curve32, mul_by_generator", |b| {
         b.iter_batched(
-            || <TinyCurve32 as CurveArithmetic>::Scalar::random(&mut OsRng),
+            || <TinyCurve32 as CurveArithmetic>::Scalar::random(&mut UnwrapErr(SysRng)),
             |scalar| ProjectivePoint::<TinyCurve32>::mul_by_generator(&scalar),
             BatchSize::SmallInput,
         )
@@ -26,7 +27,7 @@ fn bench_arithmetic(c: &mut Criterion) {
 
     group.bench_function("Curve64, mul_by_generator", |b| {
         b.iter_batched(
-            || <TinyCurve64 as CurveArithmetic>::Scalar::random(&mut OsRng),
+            || <TinyCurve64 as CurveArithmetic>::Scalar::random(&mut UnwrapErr(SysRng)),
             |scalar| ProjectivePoint::<TinyCurve64>::mul_by_generator(&scalar),
             BatchSize::SmallInput,
         )
@@ -34,7 +35,7 @@ fn bench_arithmetic(c: &mut Criterion) {
 
     group.bench_function("k256, mul_by_generator", |b| {
         b.iter_batched(
-            || <Secp256k1 as CurveArithmetic>::Scalar::random(&mut OsRng),
+            || <Secp256k1 as CurveArithmetic>::Scalar::random(&mut UnwrapErr(SysRng)),
             |scalar| ProjectivePoint::<Secp256k1>::mul_by_generator(&scalar),
             BatchSize::SmallInput,
         )
@@ -49,7 +50,7 @@ fn bench_ecdsa(c: &mut Criterion) {
     let prehash = b"12345678";
     group.bench_function("Curve16, sign", |b| {
         b.iter_batched(
-            || SigningKey::<TinyCurve16>::random(&mut OsRng),
+            || SigningKey::<TinyCurve16>::generate_from_rng(&mut UnwrapErr(SysRng)),
             |sk| sk.sign_prehash_recoverable(prehash),
             BatchSize::SmallInput,
         )
@@ -58,7 +59,7 @@ fn bench_ecdsa(c: &mut Criterion) {
     let prehash = b"12345678";
     group.bench_function("Curve32, sign", |b| {
         b.iter_batched(
-            || SigningKey::<TinyCurve32>::random(&mut OsRng),
+            || SigningKey::<TinyCurve32>::generate_from_rng(&mut UnwrapErr(SysRng)),
             |sk| sk.sign_prehash_recoverable(prehash),
             BatchSize::SmallInput,
         )
@@ -67,7 +68,7 @@ fn bench_ecdsa(c: &mut Criterion) {
     let prehash = b"12345678";
     group.bench_function("Curve64, sign", |b| {
         b.iter_batched(
-            || SigningKey::<TinyCurve64>::random(&mut OsRng),
+            || SigningKey::<TinyCurve64>::generate_from_rng(&mut UnwrapErr(SysRng)),
             |sk| sk.sign_prehash_recoverable(prehash),
             BatchSize::SmallInput,
         )
@@ -76,7 +77,7 @@ fn bench_ecdsa(c: &mut Criterion) {
     let prehash = b"01234567890123456789012345678901";
     group.bench_function("k256, sign", |b| {
         b.iter_batched(
-            || SigningKey::<Secp256k1>::random(&mut OsRng),
+            || SigningKey::<Secp256k1>::generate_from_rng(&mut UnwrapErr(SysRng)),
             |sk| sk.sign_prehash_recoverable(prehash),
             BatchSize::SmallInput,
         )

@@ -5,24 +5,21 @@ use core::{
 };
 
 use num_traits::{ConstZero, FromBytes, ToBytes};
-use primeorder::elliptic_curve::{
-    bigint::{Encoding, NonZero, U192},
-    ff::helpers::sqrt_ratio_generic,
-    generic_array::{typenum, GenericArray},
-    ops::{Invert, Reduce, ReduceNonZero},
-    rand_core::RngCore,
-    scalar::{FromUintUnchecked, IsHigh},
-    subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
-    zeroize::DefaultIsZeroes,
-    Curve, Field, PrimeField, ScalarPrimitive,
-};
-
-#[cfg(feature = "ecdsa")]
-use ::{
-    ecdsa::{hazmat::SignPrimitive, SignatureSize},
-    primeorder::{
-        elliptic_curve::{generic_array::ArrayLength, CurveArithmetic},
-        FieldBytes, PrimeCurve,
+use primeorder::{
+    ByteOrder, FieldExt, PrimeFieldExt, WnafSize,
+    elliptic_curve::{
+        Field, Generate, PrimeField,
+        array::Array,
+        bigint::{
+            U64,
+            ctutils::{self, CtAssign, CtEq, CtSelectUsingCtAssign},
+        },
+        ff::helpers::sqrt_ratio_generic,
+        ops::{BatchInvert, Invert, MulVartime, Reduce, ReduceNonZero, Retrieve},
+        rand_core::{TryCryptoRng, TryRng},
+        scalar::{FromUintUnchecked, IsHigh},
+        subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
+        zeroize::DefaultIsZeroes,
     },
 };
 
@@ -31,20 +28,36 @@ use crate::{
     traits::{Modulus, PrimeFieldConstants, PrimitiveUint},
 };
 
-// The external representation of a field element.
-// `U64` would be enough, but it has to match `ReprSizeTypenum`
-// due to some internal checks in RustCrypto stack.
-pub(crate) type ReprUint = U192;
+// The external integer representation of a field element.
+pub(crate) type ReprUint = U64;
 
-// The size of the external representation of a field element.
-// `U8` would be enough, but `U24` is the lowest size for which
-// `sec1::ModulusSize` is implemented, which is needed for `elliptic_curve::FromEncodedPoint`.
-// TODO: U8 should work starting from `sec1=0.8`, which will probably be
-// a dependency of `primeorder=0.14`.
-pub(crate) type ReprSizeTypenum = typenum::U24;
+// The byte representation of a field element (per-modulus size).
+type ReprBytes<T, const M: u64> = Array<u8, <Modulus<T, M> as PrimeFieldConstants<T>>::ReprSize>;
 
 #[derive(Default, Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub struct FieldElement<T: PrimitiveUint, const M: u64>(T);
+
+impl<T, const M: u64> CtEq for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn ct_eq(&self, other: &Self) -> ctutils::Choice {
+        // TODO: `subtle` is still required by `ff`; switch to native `ctutils` when possible.
+        ConstantTimeEq::ct_eq(self, other).into()
+    }
+}
+
+impl<T, const M: u64> CtAssign for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    fn ct_assign(&mut self, src: &Self, choice: ctutils::Choice) {
+        ConditionallySelectable::conditional_assign(self, src, choice.into())
+    }
+}
+
+// Gives us `CtSelect` via a blanket impl.
+impl<T, const M: u64> CtSelectUsingCtAssign for FieldElement<T, M> where T: PrimitiveUint {}
 
 impl<T, const M: u64> FieldElement<T, M>
 where
@@ -62,6 +75,27 @@ where
     fn to_u64(self) -> u64 {
         self.0.into()
     }
+
+    fn to_uint(self) -> ReprUint {
+        ReprUint::from(self.to_u64())
+    }
+
+    fn from_uint_unchecked(uint: ReprUint) -> Self {
+        // `bits_vartime()` is deprecated since `crypto_bigint` 0.7.11
+        // (in favor of `bit_width_vartime()`).
+        // Since `crypto_bigint` is not a direct dependency, we cannot bound its version,
+        // and instead ignore the deprecation warning.
+        #[allow(deprecated)]
+        let uint_bits = uint.bits_vartime();
+
+        debug_assert!(uint_bits <= u64::BITS);
+        const DATA_SIZE: usize = u64::BITS as usize / 8;
+        let bytes = uint.to_be_bytes();
+        let value_bytes: [u8; DATA_SIZE] = bytes[bytes.len() - DATA_SIZE..]
+            .try_into()
+            .expect("slice has the correct length");
+        Self::new_unchecked_u64(u64::from_be_bytes(value_bytes))
+    }
 }
 
 impl<T, const M: u64> FieldElement<T, M>
@@ -69,42 +103,96 @@ where
     T: PrimitiveUint,
     Modulus<T, M>: PrimeFieldConstants<T>,
 {
-    #[cfg(test)]
-    pub(crate) const MODULUS: T = Modulus::<T, M>::MODULUS;
-
-    // TODO: needed by `impl_primefield_tests!`. Ideally it should just use arithmetic ops.
+    // TODO: needed by `primefield::test_primefield!`. Ideally it should just use arithmetic ops.
     #[cfg(test)]
     pub(crate) fn add(&self, rhs: &Self) -> Self {
         Self(add::<T, M>(&self.0, &rhs.0))
     }
 
-    // TODO: needed by `impl_primefield_tests!`. Ideally it should just use arithmetic ops.
+    // TODO: needed by `primefield::test_primefield!`. Ideally it should just use arithmetic ops.
     #[cfg(test)]
     pub(crate) fn multiply(&self, rhs: &Self) -> Self {
         Self(mul::<T, M>(&self.0, &rhs.0))
+    }
+
+    // Needed by `primefield::test_primefield!`.
+    /// Returns `self^(2^n) mod p`.
+    #[cfg(test)]
+    pub(crate) fn sqn_vartime(&self, n: usize) -> Self {
+        let mut x = *self;
+        for _ in 0..n {
+            x = x * x;
+        }
+        x
+    }
+
+    // Needed by `primefield::test_primefield!`.
+    /// Returns `self^exp mod p`.
+    #[cfg(test)]
+    pub(crate) fn pow_vartime<const LIMBS: usize>(
+        &self,
+        exp: &elliptic_curve::bigint::Uint<LIMBS>,
+    ) -> Self {
+        let mut res = Self::ONE;
+        for i in (0..exp.bit_width()).rev() {
+            res = res * res;
+            if exp.bit_vartime(i) {
+                res *= *self;
+            }
+        }
+        res
     }
 
     pub(crate) fn sqrt(&self) -> CtOption<Self> {
         // All our moduli are chosen so that they are 3 mod 4.
         debug_assert!(M & 3 == 3);
         // This means calculating the square root can be done via exponentiation.
-        let res = self.pow_vartime([(M >> 2) + 1]);
-        let is_square = res.square().ct_eq(self);
+        let res = Field::pow_vartime(self, [(M >> 2) + 1]);
+        let is_square = ConstantTimeEq::ct_eq(&res.square(), self);
         CtOption::new(res, is_square)
     }
+
+    fn to_repr(self) -> ReprBytes<T, M> {
+        let mut out = ReprBytes::<T, M>::default();
+        let out_len = out.len();
+
+        let bytes = self.to_u64().to_be_bytes();
+        debug_assert!(out_len <= bytes.len());
+        debug_assert!(bytes[..bytes.len() - out_len].iter().all(|x| x == &0));
+        out.copy_from_slice(&bytes[bytes.len() - out_len..]);
+
+        out
+    }
+
+    fn try_from_repr(repr: &ReprBytes<T, M>) -> CtOption<Self> {
+        let value = u64::from(uint_from_bytes_unchecked(repr));
+
+        let within_range = value < M;
+
+        // If the value is not within [0, M), avoid triggering debug checks in `new_unchecked_u64`,
+        // and make it more clear that the value is invalid.
+        let value = if within_range { value } else { 0 };
+
+        CtOption::new(
+            Self::new_unchecked_u64(value),
+            Choice::from(within_range as u8),
+        )
+    }
+}
+
+fn uint_from_bytes_unchecked<T, const M: u64>(repr: &ReprBytes<T, M>) -> ReprUint
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+    let mut buffer = [0u8; 8];
+    debug_assert!(repr.len() <= buffer.len());
+    let buffer_len = buffer.len();
+    buffer[buffer_len - repr.len()..].copy_from_slice(repr);
+    ReprUint::from(u64::from_be_bytes(buffer))
 }
 
 impl<T, const M: u64> DefaultIsZeroes for FieldElement<T, M> where T: PrimitiveUint {}
-
-impl<C, T, const M: u64> From<ScalarPrimitive<C>> for FieldElement<T, M>
-where
-    C: Curve<Uint = ReprUint>,
-    T: PrimitiveUint,
-{
-    fn from(source: ScalarPrimitive<C>) -> Self {
-        Self::from_uint_unchecked(source.to_uint())
-    }
-}
 
 impl<T, const M: u64> FromUintUnchecked for FieldElement<T, M>
 where
@@ -113,14 +201,56 @@ where
     type Uint = ReprUint;
 
     fn from_uint_unchecked(uint: Self::Uint) -> Self {
-        debug_assert!(uint.bits_vartime() <= u64::BITS as usize);
-        const DATA_SIZE: usize = u64::BITS as usize / 8;
-        let bytes = uint.to_be_bytes();
-        let value_bytes: [u8; DATA_SIZE] = bytes[bytes.len() - DATA_SIZE..]
-            .try_into()
-            .expect("slice has the correct length");
-        Self::new_unchecked_u64(u64::from_be_bytes(value_bytes))
+        FieldElement::from_uint_unchecked(uint)
     }
+}
+
+impl<T, const M: u64> Retrieve for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+{
+    type Output = ReprUint;
+    fn retrieve(&self) -> Self::Output {
+        self.to_uint()
+    }
+}
+
+impl<T, const M: u64> Generate for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+    fn try_generate_from_rng<R>(rng: &mut R) -> Result<Self, <R as TryRng>::Error>
+    where
+        R: TryCryptoRng + ?Sized,
+    {
+        Self::try_random(rng)
+    }
+}
+
+impl<T, const M: u64> WnafSize for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+    // Must be `NUM_BITS + 1`, so it is defined per-modulus.
+    type StorageSize = <Modulus<T, M> as PrimeFieldConstants<T>>::WnafStorageSize;
+}
+
+// No methods yet, it's a placeholder for future optimized operations.
+impl<T, const M: u64> FieldExt for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+}
+
+impl<T, const M: u64> PrimeFieldExt for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+    const REPR_ENDIANNESS: ByteOrder = ByteOrder::BigEndian;
 }
 
 impl<T, const M: u64> From<u64> for FieldElement<T, M>
@@ -133,39 +263,25 @@ where
     }
 }
 
-// TODO: needed by `impl_primefield_tests!`.
+// Needed for `primefield::test_primefield!`
 #[cfg(test)]
 impl<T, const M: u64> From<u32> for FieldElement<T, M>
 where
     T: PrimitiveUint,
 {
     fn from(source: u32) -> Self {
-        let source = source.into();
-        debug_assert!(source < M);
-        Self::new_unchecked_u64(source)
+        debug_assert!(u64::from(source) < M);
+        Self::new_unchecked_u64(u64::from(source))
     }
 }
 
-impl<T, const M: u64> From<FieldElement<T, M>> for GenericArray<u8, typenum::U24>
+impl<T, const M: u64> From<FieldElement<T, M>> for ReprBytes<T, M>
 where
     T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
 {
     fn from(source: FieldElement<T, M>) -> Self {
-        let mut bytes = Self::default();
-        let bytes_len = bytes.len();
-        let source_bytes = source.to_u64().to_be_bytes();
-        bytes[bytes_len - source_bytes.len()..].copy_from_slice(source_bytes.as_ref());
-        bytes
-    }
-}
-
-impl<C, T, const M: u64> From<FieldElement<T, M>> for ScalarPrimitive<C>
-where
-    C: Curve,
-    T: PrimitiveUint,
-{
-    fn from(source: FieldElement<T, M>) -> Self {
-        ScalarPrimitive::new(C::Uint::from(source.to_u64())).expect("the value is within range")
+        source.to_repr()
     }
 }
 
@@ -174,7 +290,17 @@ where
     T: PrimitiveUint,
 {
     fn from(source: FieldElement<T, M>) -> Self {
-        ReprUint::from(source.to_u64())
+        source.to_uint()
+    }
+}
+
+// Needed by `elliptic_curve::scalar_impls!`
+impl<T, const M: u64> From<&FieldElement<T, M>> for ReprUint
+where
+    T: PrimitiveUint,
+{
+    fn from(source: &FieldElement<T, M>) -> Self {
+        source.to_uint()
     }
 }
 
@@ -206,24 +332,20 @@ impl<T, const M: u64> Reduce<ReprUint> for FieldElement<T, M>
 where
     T: PrimitiveUint,
 {
-    type Bytes = GenericArray<u8, ReprSizeTypenum>;
-
-    fn reduce(n: ReprUint) -> Self {
-        const DATA_SIZE: usize = u64::BITS as usize / 8;
-
-        // TODO: use `rem_vartime()` when the crypto stack switches to crypto-bigint 0.6
-        let reduced = n.rem(&NonZero::new(ReprUint::from(M)).expect("the modulus is non-zero"));
-
-        let bytes = reduced.to_be_bytes();
-        let value_bytes: [u8; DATA_SIZE] = bytes[bytes.len() - DATA_SIZE..]
-            .try_into()
-            .expect("slice has the correct length");
-        Self::new_unchecked_u64(u64::from_be_bytes(value_bytes))
+    fn reduce(n: &ReprUint) -> Self {
+        let value = u64::from(*n);
+        Self::new_unchecked_u64(value % M)
     }
+}
 
-    fn reduce_bytes(bytes: &Self::Bytes) -> Self {
-        let uint = ReprUint::from_be_slice(bytes);
-        Self::reduce(uint)
+impl<T, const M: u64> Reduce<ReprBytes<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+    fn reduce(n: &ReprBytes<T, M>) -> Self {
+        let uint = uint_from_bytes_unchecked(n);
+        Self::reduce(&uint)
     }
 }
 
@@ -231,25 +353,20 @@ impl<T, const M: u64> ReduceNonZero<ReprUint> for FieldElement<T, M>
 where
     T: PrimitiveUint,
 {
-    fn reduce_nonzero(n: ReprUint) -> Self {
-        const DATA_SIZE: usize = u64::BITS as usize / 8;
-
-        // TODO: use `rem_vartime()` when the crypto stack switches to crypto-bigint 0.6
-        let reduced = n.rem(
-            &NonZero::new(ReprUint::from(M - 1))
-                .expect("the modulus is non-zero and greater than 1"),
-        );
-
-        let bytes = reduced.to_be_bytes();
-        let value_bytes: [u8; DATA_SIZE] = bytes[bytes.len() - DATA_SIZE..]
-            .try_into()
-            .expect("slice has the correct length");
-        Self::new_unchecked_u64(u64::from_be_bytes(value_bytes) + 1)
+    fn reduce_nonzero(n: &ReprUint) -> Self {
+        let value = u64::from(*n);
+        Self::new_unchecked_u64(value % (M - 1) + 1)
     }
+}
 
-    fn reduce_nonzero_bytes(bytes: &Self::Bytes) -> Self {
-        let uint = ReprUint::from_be_slice(bytes);
-        Self::reduce_nonzero(uint)
+impl<T, const M: u64> ReduceNonZero<ReprBytes<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+    fn reduce_nonzero(n: &ReprBytes<T, M>) -> Self {
+        let uint = uint_from_bytes_unchecked(n);
+        Self::reduce_nonzero(&uint)
     }
 }
 
@@ -460,10 +577,15 @@ where
     const ZERO: Self = Self(T::ZERO);
     const ONE: Self = Self(T::ONE);
 
-    fn random(mut rng: impl RngCore) -> Self {
+    fn try_random<R>(rng: &mut R) -> Result<Self, R::Error>
+    where
+        R: TryRng + ?Sized,
+    {
         let mut buffer = T::Wide::ZERO.to_be_bytes();
-        rng.fill_bytes(buffer.as_mut());
-        Self(T::reduce_from_wide::<M>(T::Wide::from_be_bytes(&buffer)))
+        rng.try_fill_bytes(buffer.as_mut())?;
+        Ok(Self(T::reduce_from_wide::<M>(T::Wide::from_be_bytes(
+            &buffer,
+        ))))
     }
 
     fn square(&self) -> Self {
@@ -496,7 +618,7 @@ where
     T: PrimitiveUint,
     Modulus<T, M>: PrimeFieldConstants<T>,
 {
-    type Repr = <Modulus<T, M> as PrimeFieldConstants<T>>::Repr;
+    type Repr = ReprBytes<T, M>;
 
     const MODULUS: &'static str = Modulus::<T, M>::MODULUS_STR;
     const NUM_BITS: u32 = Modulus::<T, M>::NUM_BITS;
@@ -510,34 +632,11 @@ where
     const DELTA: Self = FieldElement::new_unchecked(Modulus::<T, M>::DELTA);
 
     fn from_repr(repr: Self::Repr) -> CtOption<Self> {
-        const DATA_SIZE: usize = u64::BITS as usize / 8;
-        let repr_len = repr.as_ref().len();
-        let data: [u8; DATA_SIZE] = repr.as_ref()[repr_len - DATA_SIZE..]
-            .try_into()
-            .expect("slice has the correct length");
-        let value = u64::from_be_bytes(data);
-        let high_bits_are_zero = repr.as_ref()[..repr_len - DATA_SIZE]
-            .iter()
-            .all(|x| x == &0);
-
-        let within_range = high_bits_are_zero && value < M;
-
-        // If the value is not within [0, M), avoid triggering debug checks in `new_unchecked_u64`,
-        // and make it more clear that the value is invalid.
-        let value = if within_range { value } else { 0 };
-
-        CtOption::new(
-            Self::new_unchecked_u64(value),
-            Choice::from(within_range as u8),
-        )
+        FieldElement::try_from_repr(&repr)
     }
 
     fn to_repr(&self) -> Self::Repr {
-        const DATA_SIZE: usize = u64::BITS as usize / 8;
-        let mut repr = Self::Repr::default();
-        let repr_len = repr.as_ref().len();
-        repr.as_mut()[repr_len - DATA_SIZE..].copy_from_slice(&self.to_u64().to_be_bytes());
-        repr
+        (*self).to_repr()
     }
 
     fn is_odd(&self) -> Choice {
@@ -554,15 +653,32 @@ where
     }
 }
 
-#[cfg(feature = "ecdsa")]
-impl<C, T, const M: u64> SignPrimitive<C> for FieldElement<T, M>
+// Uses the provided generic implementation (Montgomery's trick).
+impl<T, const M: u64> BatchInvert for FieldElement<T, M>
 where
     T: PrimitiveUint,
     Modulus<T, M>: PrimeFieldConstants<T>,
-    C: PrimeCurve + CurveArithmetic<Scalar = Self>,
-    SignatureSize<C>: ArrayLength<u8>,
-    Self: Reduce<C::Uint, Bytes = FieldBytes<C>>
-        + PrimeField<Repr = FieldBytes<C>>
-        + Into<FieldBytes<C>>,
 {
+}
+
+// There is nothing to gain from a variable-time multiplication for these small fields.
+
+impl<T, const M: u64> MulVartime for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+    fn mul_vartime(self, rhs: Self) -> Self {
+        self * rhs
+    }
+}
+
+impl<'a, T, const M: u64> MulVartime<&'a FieldElement<T, M>> for FieldElement<T, M>
+where
+    T: PrimitiveUint,
+    Modulus<T, M>: PrimeFieldConstants<T>,
+{
+    fn mul_vartime(self, rhs: &'a FieldElement<T, M>) -> Self {
+        self * rhs
+    }
 }
