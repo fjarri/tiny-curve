@@ -1,7 +1,7 @@
 use core::{
     fmt::Debug,
     iter::{Product, Sum},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg, ShrAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 use num_traits::{ConstZero, FromBytes, ToBytes};
@@ -330,15 +330,6 @@ where
     }
 }
 
-impl<T, const M: u64> ShrAssign<usize> for FieldElement<T, M>
-where
-    T: PrimitiveUint,
-{
-    fn shr_assign(&mut self, shift: usize) {
-        self.0.shr_assign(shift)
-    }
-}
-
 // Addition
 
 impl<'a, T, const M: u64> AddAssign<&'a FieldElement<T, M>> for FieldElement<T, M>
@@ -567,8 +558,6 @@ where
     }
 
     fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
-        // Note that this relies on `Self::sqrt()`,
-        // so in order to avoid infinite recurrence, that has to be overridden as well.
         sqrt_ratio_generic(num, div)
     }
 }
