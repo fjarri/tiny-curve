@@ -103,51 +103,11 @@ where
     T: PrimitiveUint,
     Modulus<T, M>: PrimeFieldConstants<T>,
 {
-    // TODO: needed by `primefield::test_primefield!`. Ideally it should just use arithmetic ops.
-    #[cfg(test)]
-    pub(crate) fn add(&self, rhs: &Self) -> Self {
-        Self(add::<T, M>(&self.0, &rhs.0))
-    }
-
-    // TODO: needed by `primefield::test_primefield!`. Ideally it should just use arithmetic ops.
-    #[cfg(test)]
-    pub(crate) fn multiply(&self, rhs: &Self) -> Self {
-        Self(mul::<T, M>(&self.0, &rhs.0))
-    }
-
-    // Needed by `primefield::test_primefield!`.
-    /// Returns `self^(2^n) mod p`.
-    #[cfg(test)]
-    pub(crate) fn sqn_vartime(&self, n: usize) -> Self {
-        let mut x = *self;
-        for _ in 0..n {
-            x = x * x;
-        }
-        x
-    }
-
-    // Needed by `primefield::test_primefield!`.
-    /// Returns `self^exp mod p`.
-    #[cfg(test)]
-    pub(crate) fn pow_vartime<const LIMBS: usize>(
-        &self,
-        exp: &elliptic_curve::bigint::Uint<LIMBS>,
-    ) -> Self {
-        let mut res = Self::ONE;
-        for i in (0..exp.bit_width()).rev() {
-            res = res * res;
-            if exp.bit_vartime(i) {
-                res *= *self;
-            }
-        }
-        res
-    }
-
-    pub(crate) fn sqrt(&self) -> CtOption<Self> {
+    fn sqrt(&self) -> CtOption<Self> {
         // All our moduli are chosen so that they are 3 mod 4.
         debug_assert!(M & 3 == 3);
         // This means calculating the square root can be done via exponentiation.
-        let res = Field::pow_vartime(self, [(M >> 2) + 1]);
+        let res = self.pow_vartime([(M >> 2) + 1]);
         let is_square = ConstantTimeEq::ct_eq(&res.square(), self);
         CtOption::new(res, is_square)
     }
