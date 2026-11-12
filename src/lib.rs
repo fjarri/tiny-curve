@@ -33,6 +33,7 @@ mod curve32;
 mod curve64;
 mod prime_field;
 mod primitives;
+mod prime_field2;
 mod reciprocal;
 mod traits;
 
