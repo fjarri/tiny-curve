@@ -39,40 +39,28 @@ impl<const M: u64> HasReciprocal for Modulus<u64, M> {
     const RECIPROCAL: Reciprocal = Reciprocal::new(M);
 }
 
-pub trait HasWide: Sized {
-    type Wide: WideUint;
-    fn to_wide(self) -> Self::Wide;
-    fn from_wide_unchecked(source: Self::Wide) -> Self;
+pub trait HasWide: Sized + TryFrom<Self::Wide> {
+    type Wide: WideUint + From<Self>;
+
+    fn to_wide(self) -> Self::Wide {
+        self.into()
+    }
+
+    fn try_from_wide(source: Self::Wide) -> Option<Self> {
+        source.try_into().ok()
+    }
 }
 
 impl HasWide for u16 {
     type Wide = u32;
-    fn to_wide(self) -> Self::Wide {
-        self.into()
-    }
-    fn from_wide_unchecked(source: Self::Wide) -> Self {
-        source as Self
-    }
 }
 
 impl HasWide for u32 {
     type Wide = u64;
-    fn to_wide(self) -> Self::Wide {
-        self.into()
-    }
-    fn from_wide_unchecked(source: Self::Wide) -> Self {
-        source as Self
-    }
 }
 
 impl HasWide for u64 {
     type Wide = u128;
-    fn to_wide(self) -> Self::Wide {
-        self.into()
-    }
-    fn from_wide_unchecked(source: Self::Wide) -> Self {
-        source as Self
-    }
 }
 
 pub trait PrimitiveUint:
@@ -98,12 +86,13 @@ pub trait PrimitiveUint:
     + Into<u64>
 {
     fn reduce_from_wide<const M: u64>(value: Self::Wide) -> Self {
-        Self::from_wide_unchecked(
+        Self::try_from_wide(
             value
                 % Self::from_u64(M)
                     .expect("modulus is within range")
                     .to_wide(),
         )
+        .expect("The value was reduced modulo correctly sized modulus")
     }
 }
 

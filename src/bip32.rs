@@ -140,8 +140,7 @@ where
 #[cfg(test)]
 mod tests {
     use bip32::{ChildNumber, PrivateKey as _, PublicKey as _};
-    use primeorder::elliptic_curve::Generate;
-    use primeorder::elliptic_curve::SecretKey;
+    use primeorder::elliptic_curve::{Generate, PublicKey, SecretKey};
     use rand::rngs::SysRng;
     use rand_core::UnwrapErr;
 
@@ -187,5 +186,26 @@ mod tests {
         let derived_from_pk = pk.derive_child(tweak).unwrap();
 
         assert_eq!(derived_from_sk.public_key(), derived_from_pk);
+    }
+
+    #[test]
+    fn conversion_to_inner() {
+        let sk = SecretKey::<TinyCurve64>::generate_from_rng(&mut UnwrapErr(SysRng));
+        let pk = sk.public_key();
+
+        let bip_sk = PrivateKeyBip32::from(sk.clone());
+        let bip_pk = PublicKeyBip32::from(pk);
+
+        let inner_sk = bip_sk.as_ref();
+        let inner_pk = bip_pk.as_ref();
+
+        assert_eq!(inner_sk, &sk);
+        assert_eq!(inner_pk, &pk);
+
+        let inner_sk = SecretKey::from(bip_sk);
+        let inner_pk = PublicKey::from(bip_pk);
+
+        assert_eq!(inner_sk, sk);
+        assert_eq!(inner_pk, pk);
     }
 }

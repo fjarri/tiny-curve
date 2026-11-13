@@ -153,6 +153,15 @@ mod tests {
     use super::{Reciprocal, rem_wide_with_reciprocal};
     use proptest::prelude::*;
 
+    #[test]
+    fn div2by1_second_correction() {
+        // Hits the `if r >= d` branch in `div2by1()`.
+        let m = 0x8000_0000_0000_0003u64;
+        let x = (1u128 << 126) | (u64::MAX as u128); // hi = 2^62, lo = u64::MAX
+        let expected = (x % (m as u128)) as u64;
+        assert_eq!(rem_wide_with_reciprocal(x, &Reciprocal::new(m)), expected);
+    }
+
     proptest! {
         #[test]
         fn rem(x in any::<u128>(), m in any::<u64>()) {
@@ -162,7 +171,9 @@ mod tests {
             else {
                 m
             };
-            let t = x % ((m as u128) * (m as u128));
+
+            // The only precondition is that the high word is smaller than `m`.
+            let t = x % ((m as u128) << 64);
 
             let expected = (t % (m as u128)) as u64;
             let test = rem_wide_with_reciprocal(t, &Reciprocal::new(m));

@@ -117,176 +117,18 @@ impl AssociatedOid for TinyCurve16 {
 
 #[cfg(test)]
 mod tests {
-    use primeorder::array::typenum::Unsigned;
-    use primeorder::{
-        PrimeField,
-        elliptic_curve::{
-            CurveArithmetic, Field, FieldBytesSize, Group, ProjectivePoint, array::Array,
-            ops::Reduce,
-        },
-    };
-    use proptest::prelude::*;
-    use rand::rngs::SysRng;
-    use rand_core::UnwrapErr;
-
     use super::TinyCurve16;
-    use crate::prime_field::ReprUint;
-
-    type Scalar = <TinyCurve16 as CurveArithmetic>::Scalar;
-    type Point = ProjectivePoint<TinyCurve16>;
-
-    #[test]
-    fn identity() {
-        let x = Scalar::random(&mut UnwrapErr(SysRng));
-        let y = Scalar::ZERO - x;
-        let p = Point::mul_by_generator(&x) + Point::mul_by_generator(&y);
-        assert_eq!(p, Point::IDENTITY);
-    }
-
-    #[test]
-    fn to_and_from_repr() {
-        let mut repr = Array::<u8, FieldBytesSize<TinyCurve16>>::default();
-
-        // `s` now contains the value `M - 1`.
-        let s = -Scalar::new_unchecked(1);
-        let s_uint: ReprUint = s.into();
-
-        // Check that to_repr/from_repr work normally
-        let s_uint_repr = s_uint.to_be_bytes();
-        repr.copy_from_slice(
-            &s_uint_repr[s_uint_repr.len() - FieldBytesSize::<TinyCurve16>::USIZE..],
-        );
-        let s_repr = s.to_repr();
-        assert_eq!(repr, s_repr);
-        assert_eq!(Scalar::from_repr(repr).unwrap(), s);
-
-        // Now construct a representation of the value `M` (which would be out of range).
-        // `M` still fits into the repr since the modulus is smaller than `2^(8 * repr.len())`.
-        let x_uint = s_uint.wrapping_add(&ReprUint::ONE);
-        let x_uint_repr = x_uint.to_be_bytes();
-        repr.copy_from_slice(
-            &x_uint_repr[x_uint_repr.len() - FieldBytesSize::<TinyCurve16>::USIZE..],
-        );
-        assert!(bool::from(Scalar::from_repr(repr).is_none()));
-    }
-
-    prop_compose! {
-        /// Generate a random odd modulus.
-        fn scalar()(n in any::<u64>()) -> Scalar {
-            Scalar::reduce(&ReprUint::from(n))
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn mul_by_generator(x in scalar(), y in scalar()) {
-            let p1 = Point::mul_by_generator(&x) + Point::mul_by_generator(&y);
-            let p2 = Point::mul_by_generator(&(x + y));
-            assert_eq!(p1, p2);
-        }
-    }
+    crate::test_macros::test_curve!(TinyCurve16);
 }
 
 #[cfg(test)]
 mod tests_scalar {
-    use primeorder::{Field, elliptic_curve::CurveArithmetic};
-
     use super::TinyCurve16;
-    use crate::prime_field::ReprUint;
-
-    type F = <TinyCurve16 as CurveArithmetic>::Scalar;
-
-    primefield::test_primefield!(F, ReprUint);
+    crate::test_macros::test_scalar!(TinyCurve16);
 }
 
 #[cfg(test)]
 mod tests_field_element {
-    use primeorder::{Field, FieldArithmetic};
-
     use super::TinyCurve16;
-    use crate::prime_field::ReprUint;
-
-    type F = <TinyCurve16 as FieldArithmetic>::FieldElement;
-
-    primefield::test_primefield!(F, ReprUint);
-}
-
-#[cfg(all(test, feature = "ecdsa"))]
-mod tests_ecdsa {
-    use ecdsa::{SigningKey, VerifyingKey};
-    use primeorder::elliptic_curve::Generate;
-    use rand::rngs::SysRng;
-    use rand_core::UnwrapErr;
-
-    use super::TinyCurve16;
-
-    #[test]
-    fn sign_and_verify() {
-        let prehash = b"123456781234567812345678";
-        let sk = SigningKey::<TinyCurve16>::generate_from_rng(&mut UnwrapErr(SysRng));
-
-        let (signature, recovery_id) = sk.sign_prehash_recoverable(prehash);
-        let vk = VerifyingKey::recover_from_prehash(prehash, &signature, recovery_id).unwrap();
-        assert_eq!(sk.verifying_key(), &vk);
-    }
-}
-
-#[cfg(all(test, feature = "pkcs8"))]
-mod tests_pkcs8 {
-    use primeorder::elliptic_curve::Generate;
-    use primeorder::elliptic_curve::{
-        PublicKey, SecretKey,
-        pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey},
-    };
-    use rand::rngs::SysRng;
-    use rand_core::UnwrapErr;
-
-    use super::TinyCurve16;
-
-    #[test]
-    fn serialize_secret_key() {
-        let sk = SecretKey::<TinyCurve16>::generate_from_rng(&mut UnwrapErr(SysRng));
-        let der = sk.to_pkcs8_der().unwrap();
-        let sk_back = SecretKey::<TinyCurve16>::from_pkcs8_der(der.as_bytes()).unwrap();
-        assert_eq!(sk, sk_back);
-    }
-
-    #[test]
-    fn serialize_public_key() {
-        let sk = SecretKey::<TinyCurve16>::generate_from_rng(&mut UnwrapErr(SysRng));
-        let pk = sk.public_key();
-        let der = pk.to_public_key_der().unwrap();
-        let pk_back = PublicKey::<TinyCurve16>::from_public_key_der(der.as_bytes()).unwrap();
-        assert_eq!(pk, pk_back);
-    }
-}
-
-#[cfg(all(test, feature = "serde"))]
-mod tests_serde {
-    use primeorder::elliptic_curve::Generate;
-    use primeorder::elliptic_curve::{PublicKey, SecretKey};
-    use rand::rngs::SysRng;
-    use rand_core::UnwrapErr;
-
-    use super::TinyCurve16;
-
-    #[test]
-    fn serialize_public_key() {
-        let sk = SecretKey::<TinyCurve16>::generate_from_rng(&mut UnwrapErr(SysRng));
-        let pk = sk.public_key();
-        let bytes = postcard::to_allocvec(&pk).unwrap();
-        let pk_back: PublicKey<TinyCurve16> = postcard::from_bytes(&bytes).unwrap();
-        assert_eq!(pk, pk_back);
-    }
-
-    #[cfg(feature = "ecdsa")]
-    #[test]
-    fn serialize_verifying_key() {
-        let sk = SecretKey::<TinyCurve16>::generate_from_rng(&mut UnwrapErr(SysRng));
-        let pk = sk.public_key();
-        let vk = ecdsa::VerifyingKey::from(&pk);
-        let bytes = postcard::to_allocvec(&vk).unwrap();
-        let vk_back: ecdsa::VerifyingKey<TinyCurve16> = postcard::from_bytes(&bytes).unwrap();
-        assert_eq!(vk, vk_back);
-    }
+    crate::test_macros::test_field!(TinyCurve16);
 }

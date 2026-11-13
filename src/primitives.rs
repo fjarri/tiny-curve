@@ -133,6 +133,18 @@ mod tests {
         assert!(modular_inverse::<u64, M>(&0).is_none());
     }
 
+    #[test]
+    fn inverse_with_degenerate_modulus() {
+        assert!(modular_inverse::<u64, 1>(&0).is_none());
+        assert!(modular_inverse::<u64, 0>(&0).is_none());
+    }
+
+    #[test]
+    fn inverse_not_coprime() {
+        const M: u64 = 0x8u64;
+        assert!(modular_inverse::<u64, M>(&4).is_none());
+    }
+
     proptest! {
         #[test]
         fn inverse(x in any::<u64>()) {

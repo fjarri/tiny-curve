@@ -1,7 +1,7 @@
 use core::{
     fmt::Debug,
     iter::{Product, Sum},
-    ops::{Add, AddAssign, Mul, MulAssign, Neg, ShrAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 use num_traits::{ConstZero, FromBytes, ToBytes};
@@ -103,51 +103,11 @@ where
     T: PrimitiveUint,
     Modulus<T, M>: PrimeFieldConstants<T>,
 {
-    // TODO: needed by `primefield::test_primefield!`. Ideally it should just use arithmetic ops.
-    #[cfg(test)]
-    pub(crate) fn add(&self, rhs: &Self) -> Self {
-        Self(add::<T, M>(&self.0, &rhs.0))
-    }
-
-    // TODO: needed by `primefield::test_primefield!`. Ideally it should just use arithmetic ops.
-    #[cfg(test)]
-    pub(crate) fn multiply(&self, rhs: &Self) -> Self {
-        Self(mul::<T, M>(&self.0, &rhs.0))
-    }
-
-    // Needed by `primefield::test_primefield!`.
-    /// Returns `self^(2^n) mod p`.
-    #[cfg(test)]
-    pub(crate) fn sqn_vartime(&self, n: usize) -> Self {
-        let mut x = *self;
-        for _ in 0..n {
-            x = x * x;
-        }
-        x
-    }
-
-    // Needed by `primefield::test_primefield!`.
-    /// Returns `self^exp mod p`.
-    #[cfg(test)]
-    pub(crate) fn pow_vartime<const LIMBS: usize>(
-        &self,
-        exp: &elliptic_curve::bigint::Uint<LIMBS>,
-    ) -> Self {
-        let mut res = Self::ONE;
-        for i in (0..exp.bit_width()).rev() {
-            res = res * res;
-            if exp.bit_vartime(i) {
-                res *= *self;
-            }
-        }
-        res
-    }
-
-    pub(crate) fn sqrt(&self) -> CtOption<Self> {
+    fn sqrt(&self) -> CtOption<Self> {
         // All our moduli are chosen so that they are 3 mod 4.
         debug_assert!(M & 3 == 3);
         // This means calculating the square root can be done via exponentiation.
-        let res = Field::pow_vartime(self, [(M >> 2) + 1]);
+        let res = self.pow_vartime([(M >> 2) + 1]);
         let is_square = ConstantTimeEq::ct_eq(&res.square(), self);
         CtOption::new(res, is_square)
     }
@@ -367,15 +327,6 @@ where
     fn reduce_nonzero(n: &ReprBytes<T, M>) -> Self {
         let uint = uint_from_bytes_unchecked(n);
         Self::reduce_nonzero(&uint)
-    }
-}
-
-impl<T, const M: u64> ShrAssign<usize> for FieldElement<T, M>
-where
-    T: PrimitiveUint,
-{
-    fn shr_assign(&mut self, shift: usize) {
-        self.0.shr_assign(shift)
     }
 }
 
@@ -607,8 +558,6 @@ where
     }
 
     fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
-        // Note that this relies on `Self::sqrt()`,
-        // so in order to avoid infinite recurrence, that has to be overridden as well.
         sqrt_ratio_generic(num, div)
     }
 }

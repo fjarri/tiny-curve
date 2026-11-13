@@ -39,6 +39,9 @@ mod traits;
 #[cfg(feature = "bip32")]
 mod bip32;
 
+#[cfg(test)]
+mod test_macros;
+
 pub use curve16::TinyCurve16;
 pub use curve32::TinyCurve32;
 pub use curve64::TinyCurve64;
