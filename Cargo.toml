@@ -43,3 +43,6 @@ bench = true
 name = "bench"
 harness = false
 path = "benches/bench.rs"
+
+[patch.crates-io]
+primefield = { git = "https://github.com/RustCrypto/elliptic-curves", revision = "af04a147345f42340e6d551dde488487f3725fdb" }
